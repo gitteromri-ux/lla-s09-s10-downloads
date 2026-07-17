@@ -1,0 +1,147 @@
+name: Courtney NEW SET Composite (0717)
+
+# Replaces the set/background of 0717.mp4 with the new interview set,
+# keeping Courtney, her performance, timing and monologue audio EXACTLY.
+# Courtney is matted per-frame and planted onto the new set (chair).
+# Result is BOTH committed to deliverables/ AND uploaded as a downloadable
+# artifact on the run page (so you can grab the mp4 with one click).
+
+on:
+  workflow_dispatch:
+    inputs:
+      set_image_id:
+        description: "Drive file id of the new-set background PNG"
+        required: false
+        default: "1YCad3sCh637rcoL9HocaqPt8xlku7zr7"   # set_interview.png
+      out_height:
+        description: "Output height (1080 fast / 2160 4K slow)"
+        required: false
+        default: "1080"
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg unzip python3-pip
+          pip3 install --quiet "rembg[cpu]" onnxruntime pillow numpy
+
+      - name: Download source video 0717.zip
+        run: |
+          set -e
+          curl -L --fail --retry 5 --retry-delay 5 \
+            "https://drive.usercontent.google.com/download?id=1VyhOqzO5FuHcnSRKzDpA40AK_4hJkqSQ&export=download&confirm=t" \
+            -o 0717.zip
+          mkdir -p src && unzip -o 0717.zip -d src
+          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
+          echo "VIDEO=$VID" >> $GITHUB_ENV
+          ffprobe -v error -show_entries format=duration -show_entries stream=width,height,r_frame_rate -of default=noprint_wrappers=1 "$VID" || true
+
+      - name: Download NEW SET background from Drive
+        run: |
+          set -e
+          curl -L --fail --retry 5 --retry-delay 5 \
+            "https://drive.usercontent.google.com/download?id=${{ github.event.inputs.set_image_id }}&export=download&confirm=t" \
+            -o newset.png
+          ffprobe -v error -show_entries stream=width,height -of default=noprint_wrappers=1 newset.png || true
+
+      - name: Prep audio + background at output resolution
+        run: |
+          set -e
+          mkdir -p work out
+          OH=${{ github.event.inputs.out_height }}
+          OW=$(( OH * 16 / 9 ))
+          echo "OUT_W=$OW" >> $GITHUB_ENV
+          echo "OUT_H=$OH" >> $GITHUB_ENV
+          ffmpeg -y -i "$VIDEO" -vn -c:a aac -b:a 256k work/audio.m4a
+          ffmpeg -y -i newset.png -vf "scale=${OW}:${OH}:force_original_aspect_ratio=increase,crop=${OW}:${OH}" work/bg.png
+
+      - name: Matte Courtney per-frame + composite onto new set
+        run: |
+          set -e
+          cat > stream.py <<'PY'
+          import os, subprocess
+          import numpy as np
+          from rembg import remove, new_session
+          from PIL import Image, ImageFilter
+          OW = int(os.environ["OUT_W"]); OH = int(os.environ["OUT_H"])
+          VIDEO = os.environ["VIDEO"]
+          MW, MH = 1280, 720
+          FPS = 30
+          sess = new_session("u2net_human_seg")
+          bg = Image.open("work/bg.png").convert("RGBA").resize((OW, OH))
+          dec = subprocess.Popen(
+              ["ffmpeg","-i",VIDEO,"-vf",f"scale={MW}:{MH}:flags=bilinear","-r",str(FPS),
+               "-f","rawvideo","-pix_fmt","rgb24","-"],
+              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+          enc = subprocess.Popen(
+              ["ffmpeg","-y","-f","rawvideo","-pix_fmt","rgb24","-s",f"{OW}x{OH}","-r",str(FPS),"-i","-",
+               "-c:v","libx264","-preset","medium","-crf","18","-pix_fmt","yuv420p",
+               "work/video_noaudio.mp4"],
+              stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+          fsize = MW*MH*3
+          i = 0
+          while True:
+              raw = dec.stdout.read(fsize)
+              if len(raw) < fsize: break
+              frame = Image.frombytes("RGB",(MW,MH),raw).convert("RGBA")
+              cut = remove(frame, session=sess)
+              cut = cut.resize((OW, OH), Image.LANCZOS)
+              r,g,b,a = cut.split()
+              a = a.filter(ImageFilter.GaussianBlur(0.8))
+              cut = Image.merge("RGBA",(r,g,b,a))
+              shadow = Image.new("RGBA",(OW,OH),(0,0,0,0))
+              sa = a.filter(ImageFilter.GaussianBlur(9))
+              sa = sa.point(lambda v: int(v*0.45))
+              shadow.putalpha(sa)
+              shadow = shadow.transform((OW,OH), Image.AFFINE, (1,0,int(OW*0.006),0,1,int(OH*0.012)))
+              comp = Image.alpha_composite(bg.copy(), shadow)
+              comp = Image.alpha_composite(comp, cut).convert("RGB")
+              enc.stdin.write(comp.tobytes())
+              i += 1
+              if i % 300 == 0: print("frames", i, flush=True)
+          enc.stdin.close(); enc.wait(); dec.wait()
+          print("TOTAL FRAMES", i, flush=True)
+          PY
+          python3 stream.py
+
+      - name: Mux original monologue audio (exact, unchanged)
+        run: |
+          set -e
+          OH=${{ github.event.inputs.out_height }}
+          ffmpeg -y -i work/video_noaudio.mp4 -i work/audio.m4a \
+            -c:v copy -c:a aac -b:a 256k -shortest \
+            out/Courtney_FRONT_NEWSET_0717_${OH}p.mp4
+          ls -la out
+
+      - name: Upload result as downloadable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Courtney_FRONT_NEWSET_0717
+          path: out/*.mp4
+          if-no-files-found: error
+
+      - name: Also commit deliverable to repo (git LFS)
+        run: |
+          set -e
+          OH=${{ github.event.inputs.out_height }}
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          mkdir -p deliverables
+          cp out/Courtney_FRONT_NEWSET_0717_${OH}p.mp4 deliverables/
+          git add .gitattributes deliverables/Courtney_FRONT_NEWSET_0717_${OH}p.mp4
+          git commit -m "Render: Courtney on NEW interview set (0717, ${OH}p, monologue intact)" || echo "nothing to commit"
+          for n in 1 2 3 4; do git push origin HEAD:main && break || sleep $((2**n)); done
