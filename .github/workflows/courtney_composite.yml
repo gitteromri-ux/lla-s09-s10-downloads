@@ -1,0 +1,46 @@
+name: Courtney New-Set Composite (0717)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg unzip
+
+      - name: Download 0717.zip from Drive
+        run: |
+          set -e
+          curl -L --fail --retry 5 --retry-delay 5 \
+            "https://drive.usercontent.google.com/download?id=1VyhOqzO5FuHcnSRKzDpA40AK_4hJkqSQ&export=download&confirm=t" \
+            -o 0717.zip
+          ls -la 0717.zip
+
+      - name: Unzip and list contents
+        run: |
+          mkdir -p src
+          unzip -o 0717.zip -d src || true
+          echo "===== FULL FILE TREE ====="
+          find src -type f -exec ls -la {} \;
+          echo "===== VIDEOS ====="
+          find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \)
+          echo "===== IMAGES ====="
+          find src -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \)
+
+      - name: Probe the video(s)
+        run: |
+          for v in $(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \)); do
+            echo "=== $v ==="
+            ffprobe -v error -show_entries format=duration,size -show_entries stream=codec_type,width,height,r_frame_rate -of default=noprint_wrappers=1 "$v" || true
+          done
