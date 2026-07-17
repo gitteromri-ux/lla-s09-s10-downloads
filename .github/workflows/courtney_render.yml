@@ -1,4 +1,4 @@
-name: Courtney New-Set Composite Fast
+name: Courtney New-Set Composite Stream
 
 on:
   workflow_dispatch:
@@ -29,47 +29,54 @@ jobs:
           mkdir -p src && unzip -o 0717.zip -d src
           ls -la src
 
-      - name: Prep audio, frames (720p), background
+      - name: Extract audio + prep background
         run: |
           set -e
-          mkdir -p work/frames work/matted out
-          # original audio untouched
+          mkdir -p work out
           ffmpeg -y -i src/0717.mp4 -vn -c:a aac -b:a 192k work/audio.m4a
-          # extract frames DIRECTLY at 720p (fast, small) 30fps
-          ffmpeg -y -i src/0717.mp4 -vf "scale=1280:720:flags=bilinear" -r 30 work/frames/f_%05d.png
-          echo "frames:"; ls work/frames | wc -l
-          # background scaled+cropped to 720p
           ffmpeg -y -i assets/set_cover.jpg -vf "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720" work/bg.png
 
-      - name: Segment + composite
+      - name: Streaming segment + composite + encode
         run: |
           set -e
-          cat > seg.py <<'PY'
-          import glob
+          cat > stream.py <<'PY'
+          import subprocess, numpy as np
           from rembg import remove, new_session
           from PIL import Image
+          W,H,FPS = 1280,720,30
           sess = new_session("u2net_human_seg")
           bg = Image.open("work/bg.png").convert("RGBA")
-          frames = sorted(glob.glob("work/frames/f_*.png"))
-          print("frames:", len(frames), flush=True)
-          for i, fp in enumerate(frames):
-              img = Image.open(fp).convert("RGBA")
-              cut = remove(img, session=sess)
-              comp = Image.alpha_composite(bg.copy(), cut)
-              comp.convert("RGB").save("work/matted/%05d.png" % i)
-              if i % 300 == 0:
-                  print("done", i, flush=True)
-          print("ALL DONE", flush=True)
-          PY
-          python3 seg.py
 
-      - name: Reassemble video + audio
-        run: |
-          set -e
-          ffmpeg -y -framerate 30 -i work/matted/%05d.png -i work/audio.m4a \
-            -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p \
-            -c:a aac -b:a 192k -shortest \
-            out/Courtney_FRONT_NEWSET_0717.mp4
+          dec = subprocess.Popen(
+              ["ffmpeg","-i","src/0717.mp4","-vf",f"scale={W}:{H}:flags=bilinear","-r",str(FPS),
+               "-f","rawvideo","-pix_fmt","rgb24","-"],
+              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+          enc = subprocess.Popen(
+              ["ffmpeg","-y","-f","rawvideo","-pix_fmt","rgb24","-s",f"{W}x{H}","-r",str(FPS),"-i","-",
+               "-vf","scale=1920:1080:flags=lanczos",
+               "-c:v","libx264","-preset","veryfast","-crf","20","-pix_fmt","yuv420p",
+               "work/video_noaudio.mp4"],
+              stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+          fsize = W*H*3
+          i = 0
+          while True:
+              raw = dec.stdout.read(fsize)
+              if len(raw) < fsize: break
+              frame = Image.frombytes("RGB",(W,H),raw).convert("RGBA")
+              cut = remove(frame, session=sess)
+              comp = Image.alpha_composite(bg.copy(), cut).convert("RGB")
+              enc.stdin.write(comp.tobytes())
+              i += 1
+              if i % 300 == 0: print("frames", i, flush=True)
+          enc.stdin.close(); enc.wait(); dec.wait()
+          print("TOTAL FRAMES", i, flush=True)
+          PY
+          python3 stream.py
+          # mux original audio
+          ffmpeg -y -i work/video_noaudio.mp4 -i work/audio.m4a \
+            -c:v copy -c:a aac -b:a 192k -shortest out/Courtney_FRONT_NEWSET_0717.mp4
           ls -la out
 
       - name: Commit result (git LFS)
@@ -82,5 +89,5 @@ jobs:
           mkdir -p deliverables
           cp out/Courtney_FRONT_NEWSET_0717.mp4 deliverables/
           git add .gitattributes deliverables/Courtney_FRONT_NEWSET_0717.mp4
-          git commit -m "Render: Courtney front on new library set (0717, 720p)" || echo "nothing to commit"
+          git commit -m "Render: Courtney front on new library set (0717, streamed, 1080p out)" || echo "nothing to commit"
           git push origin main
