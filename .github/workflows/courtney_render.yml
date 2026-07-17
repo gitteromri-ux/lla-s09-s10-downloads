@@ -1,0 +1,87 @@
+name: Courtney New-Set Composite Render
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg unzip python3-pip
+          pip3 install --quiet "rembg[cpu]" onnxruntime pillow numpy
+
+      - name: Download 0717.zip from Drive
+        run: |
+          set -e
+          curl -L --fail --retry 5 --retry-delay 5 \
+            "https://drive.usercontent.google.com/download?id=1VyhOqzO5FuHcnSRKzDpA40AK_4hJkqSQ&export=download&confirm=t" \
+            -o 0717.zip
+          mkdir -p src && unzip -o 0717.zip -d src
+          ls -la src
+
+      - name: Extract audio + downscale frames to 1080p
+        run: |
+          set -e
+          mkdir -p work/frames work/matted out
+          # keep original audio untouched
+          ffmpeg -y -i src/0717.mp4 -vn -acodec copy work/audio.m4a 2>/dev/null || \
+            ffmpeg -y -i src/0717.mp4 -vn -c:a aac -b:a 192k work/audio.m4a
+          # extract frames at 1080p, 30fps
+          ffmpeg -y -i src/0717.mp4 -vf "scale=1920:1080:flags=lanczos" -r 30 work/frames/f_%05d.png
+          echo "frame count:"; ls work/frames | wc -l
+          # prep background scaled to 1080p
+          ffmpeg -y -i assets/set_cover.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080" work/bg.png
+
+      - name: Segment Courtney (rembg u2net) and composite over set
+        run: |
+          set -e
+          cat > seg.py <<'PY'
+          import os, glob
+          from rembg import remove, new_session
+          from PIL import Image
+          sess = new_session("u2net_human_seg")
+          bg = Image.open("work/bg.png").convert("RGBA")
+          frames = sorted(glob.glob("work/frames/f_*.png"))
+          print("frames:", len(frames))
+          for i, fp in enumerate(frames):
+              img = Image.open(fp).convert("RGBA")
+              cut = remove(img, session=sess)  # person with alpha
+              comp = Image.alpha_composite(bg.copy(), cut)
+              comp.convert("RGB").save("work/matted/%05d.png" % i)
+              if i % 200 == 0:
+                  print("done", i, flush=True)
+          print("ALL DONE")
+          PY
+          python3 seg.py
+
+      - name: Reassemble video + original audio
+        run: |
+          set -e
+          ffmpeg -y -framerate 30 -i work/matted/%05d.png -i work/audio.m4a \
+            -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p \
+            -c:a aac -b:a 192k -shortest \
+            out/Courtney_FRONT_NEWSET_0717.mp4
+          ls -la out
+
+      - name: Commit result to repo (git LFS)
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          mkdir -p deliverables
+          cp out/Courtney_FRONT_NEWSET_0717.mp4 deliverables/
+          git add .gitattributes deliverables/Courtney_FRONT_NEWSET_0717.mp4
+          git commit -m "Render: Courtney front video on new library set (0717)" || echo "nothing to commit"
+          git push origin main
