@@ -48,7 +48,7 @@ jobs:
               fg_mean = rgb[m].mean(0) + 1e-6
               gain = np.clip(1.0 + (set_mean/fg_mean - 1.0)*0.6, 0.90, 1.12)
               rgb = np.clip(rgb*gain, 0, 255)
-          a_img = Image.fromarray(alpha.astype(np.uint8),"L").filter(ImageFilter.GaussianBlur(0.7))
+          a_img = Image.fromarray(alpha.astype(np.uint8),"L").filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.7))
           cut = Image.fromarray(np.dstack([rgb, np.asarray(a_img)[...,None].astype(np.float32)]).astype(np.uint8),"RGBA")
           canvas = cut
           a_small = canvas.split()[3]
