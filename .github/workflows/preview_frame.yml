@@ -50,11 +50,11 @@ jobs:
               rgb = np.clip(rgb*gain, 0, 255)
           a_img = Image.fromarray(alpha.astype(np.uint8),"L").filter(ImageFilter.GaussianBlur(0.7))
           cut = Image.fromarray(np.dstack([rgb, np.asarray(a_img)[...,None].astype(np.float32)]).astype(np.uint8),"RGBA")
-          PS = 0.88
+          PS = 0.62
           sw, sh = int(OW*PS), int(OH*PS)
           cut_s = cut.resize((sw, sh), Image.LANCZOS)
           canvas = Image.new("RGBA",(OW,OH),(0,0,0,0))
-          canvas.paste(cut_s, ((OW-sw)//2, OH-sh), cut_s)
+          canvas.paste(cut_s, (1037 - sw//2, 985 - sh), cut_s)
           a_small = canvas.split()[3]
           sa = a_small.filter(ImageFilter.GaussianBlur(10)).point(lambda v: int(v*0.4))
           shadow = Image.new("RGBA",(OW,OH),(0,0,0,0)); shadow.putalpha(sa)
