@@ -112,7 +112,7 @@ jobs:
               m = alpha > 8
               if m.any():
                   fg_mean = rgb[m].mean(0) + 1e-6
-                  gain = 1.0 + (set_mean/fg_mean - 1.0)*0.45
+                  gain = 1.0 + (set_mean/fg_mean - 1.0)*0.6
                   gain = np.clip(gain, 0.90, 1.12)
                   rgb = np.clip(rgb*gain, 0, 255)
               if prev_alpha is not None:
@@ -136,6 +136,9 @@ jobs:
               comp = comp.resize((zw, zh), Image.LANCZOS)
               x0, y0 = (zw-OW)//2, (zh-OH)//2
               comp = comp.crop((x0, y0, x0+OW, y0+OH))
+              ar = np.asarray(comp).astype(np.float32)
+              ar += np.random.normal(0, 2.2, ar.shape)
+              comp = Image.fromarray(np.clip(ar,0,255).astype(np.uint8))
               if g in qc_at:
                   comp.save(f"qc/qc_{g:06d}.png")
               enc.stdin.write(comp.tobytes())
