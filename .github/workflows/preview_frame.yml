@@ -38,6 +38,11 @@ jobs:
           OW, OH = 1920, 1080
           sess = new_session("u2net_human_seg")
           bg = Image.open("work/bg.png").convert("RGBA")
+          import numpy as _np
+          _strip_y = 940
+          _strip = bg.convert("RGB").crop((0,_strip_y,1920,1080))
+          _ramp = _np.clip((_np.arange(1080-_strip_y)[:,None])*6, 0, 255).astype(_np.uint8)
+          _smask = Image.fromarray(_np.repeat(_ramp, 1920, axis=1), "L")
           set_mean = np.asarray(bg.convert("RGB")).astype(np.float32).reshape(-1,3).mean(0) + 1e-6
           frame = Image.open("work/frame.png").convert("RGBA")
           cut = remove(frame, session=sess)
@@ -61,6 +66,7 @@ jobs:
           shadow = shadow.transform((OW,OH), Image.AFFINE, (1,0,10,0,1,13))
           comp = Image.alpha_composite(bg.copy(), shadow)
           comp = Image.alpha_composite(comp, canvas).convert("RGB")
+              comp.paste(_strip, (0,_strip_y), _smask)
           ar = np.asarray(comp).astype(np.float32)
           ar += np.random.normal(0, 2.2, ar.shape)
           comp = Image.fromarray(np.clip(ar,0,255).astype(np.uint8))
