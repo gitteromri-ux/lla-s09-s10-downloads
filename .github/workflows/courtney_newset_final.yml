@@ -69,8 +69,8 @@ jobs:
           mkdir -p src && unzip -o 0717.zip -d src
           VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
           echo "VIDEO=$VID" >> $GITHUB_ENV
-          ffmpeg -y -i work/plate.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080" work/bg.png
-          ffmpeg -y -i assets/wide_plate.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080" work/bg_wide.png
+          ffmpeg -y -i work/plate.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,gblur=sigma=1.1,noise=alls=5:allf=t" -frames:v 1 work/bg.png
+          ffmpeg -y -i assets/wide_plate.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,gblur=sigma=1.1,noise=alls=5:allf=t" -frames:v 1 work/bg_wide.png
 
       - name: Matte + composite chunk ${{ matrix.i }}
         run: |
