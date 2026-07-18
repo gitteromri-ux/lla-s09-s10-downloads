@@ -85,6 +85,10 @@ jobs:
           SF = int(os.environ["CH_SF"]); TOTAL = int(os.environ["CH_TOTAL"])
           sess = new_session("u2net_human_seg")
           bg = Image.open("work/bg.png").convert("RGBA")
+          import numpy as _np
+          _lip = bg.convert("RGB").crop((640, 1000, 1310, 1080))
+          _lr = _np.clip((_np.arange(80)[:,None])*9, 0, 255).astype(_np.uint8)
+          _lipmask = Image.fromarray(_np.repeat(_lr, 670, axis=1), "L")
           bg_np = np.asarray(bg.convert("RGB")).astype(np.float32)
           set_mean = bg_np.reshape(-1,3).mean(0) + 1e-6
           dec = subprocess.Popen(
@@ -127,6 +131,7 @@ jobs:
               shadow = shadow.transform((OW,OH), Image.AFFINE, (1,0,int(OW*0.005),0,1,int(OH*0.012)))
               comp = Image.alpha_composite(bg.copy(), shadow)
               comp = Image.alpha_composite(comp, canvas).convert("RGB")
+              comp.paste(_lip, (640, 1000), _lipmask)
               z = 1.0 + 0.05*min(g/max(TOTAL,1), 1.0)
               zw, zh = int(OW*z), int(OH*z)
               comp = comp.resize((zw, zh), Image.LANCZOS)
