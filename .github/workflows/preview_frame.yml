@@ -62,11 +62,11 @@ jobs:
           r2,g2,b2,a2 = cut.split()
           a2 = Image.fromarray(_np.minimum(_np.asarray(a2), _edge).astype(_np.uint8), "L")
           cut = Image.merge("RGBA", (r2,g2,b2,a2))
-          PS = 1.0
+          PS = 0.75
           sw, sh = int(OW*PS), int(OH*PS)
           cut_s = cut.resize((sw, sh), Image.LANCZOS)
           canvas = Image.new("RGBA",(OW,OH),(0,0,0,0))
-          canvas.paste(cut_s, (960 - sw//2, 1080 - sh), cut_s)
+          canvas.paste(cut_s, (945 - sw//2, 900 - sh), cut_s)
           a_small = canvas.split()[3]
           sa = a_small.filter(ImageFilter.GaussianBlur(22)).point(lambda v: int(v*0.2))
           shadow = Image.new("RGBA",(OW,OH),(0,0,0,0)); shadow.putalpha(sa)
