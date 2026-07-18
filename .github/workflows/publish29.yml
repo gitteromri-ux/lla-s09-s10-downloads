@@ -1,0 +1,83 @@
+name: Publish FULL29 (split, no quality loss)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install ffmpeg + git-lfs
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+
+      - name: Download finished film artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Courtney_FULL29_NEWSET
+          run-id: 29595238485
+          github-token: ${{ github.token }}
+          path: art
+
+      - name: Split at zero loss + probe
+        run: |
+          set -e
+          find art -type f | head -20
+          SRC=$(find art -type f -name '*.mp4' | head -1)
+          mkdir -p deliverables/qc out
+          cp art/deliverables/qc/*.png deliverables/qc/ 2>/dev/null || find art -name 'qc_*.png' -exec cp {} deliverables/qc/ \; || true
+          D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$SRC")
+          H=$(python3 -c "print($D/2)")
+          ffmpeg -y -i "$SRC" -t "$H" -c copy out/Courtney_FULL29_NEWSET_part1.mp4
+          ffmpeg -y -ss "$H" -i "$SRC" -c copy out/Courtney_FULL29_NEWSET_part2.mp4
+          ls -la out
+          for f in out/*.mp4; do
+            echo "=== $f ==="
+            ffprobe -v error -show_entries format=duration,size -show_entries stream=codec_type -of default=noprint_wrappers=1 "$f"
+          done
+
+      - name: Add FULL FILM cards to landing page
+        run: |
+          python3 - <<'PY'
+          html = open('index.html').read()
+          if 'Courtney_FULL29_NEWSET_part1' not in html:
+              base = "https://media.githubusercontent.com/media/gitteromri-ux/lla-s09-s10-downloads/main/deliverables/"
+              sec = ('\n<h2>&#9733; FULL FILM &middot; Courtney &middot; NEW SET (29 min, 2 parts)</h2>\n'
+                     '<p class="sec-note">Full 29-min master on the new set &middot; original audio &middot; 1920&times;1080 &middot; lossless split</p>\n'
+                     '<div class="grid">\n'
+                     f'<div class="card"><h3>Part 1</h3><div class="meta">FULL FILM &middot; 1080p</div>\n'
+                     f'<video src="{base}Courtney_FULL29_NEWSET_part1.mp4" autoplay muted loop playsinline controls preload="metadata"></video>\n'
+                     f'<div class="btn-row"><a class="btn" href="{base}Courtney_FULL29_NEWSET_part1.mp4" download>&#11015; Download Part 1</a></div></div>\n'
+                     f'<div class="card"><h3>Part 2</h3><div class="meta">FULL FILM &middot; 1080p</div>\n'
+                     f'<video src="{base}Courtney_FULL29_NEWSET_part2.mp4" autoplay muted loop playsinline controls preload="metadata"></video>\n'
+                     f'<div class="btn-row"><a class="btn" href="{base}Courtney_FULL29_NEWSET_part2.mp4" download>&#11015; Download Part 2</a></div></div>\n'
+                     '</div>\n')
+              i = html.find('class="lede"')
+              j = html.find('</p>', i) + 4
+              open('index.html','w').write(html[:j] + sec + html[j:])
+              print("cards added")
+          PY
+
+      - name: Commit (fail loudly)
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4"
+          cp out/*.mp4 deliverables/
+          git add .gitattributes index.html deliverables/
+          git commit -m "FULL29: 29-min film on new set, lossless 2-part split + page cards"
+          ok=0
+          for n in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && ok=1 && break
+            sleep $((2**n))
+          done
+          [ "$ok" = "1" ] || { echo "PUSH FAILED"; exit 1; }
