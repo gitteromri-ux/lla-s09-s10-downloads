@@ -139,7 +139,7 @@ jobs:
               if g < SCENE_SPLIT:
                   PS, CX, WY, BGSEL = 0.148, 982, 575, bg_wide
               else:
-                  PS, CX, WY, BGSEL = 0.57, 975, 790, bg
+                  PS, CX, WY, BGSEL = 0.39, 961, 735, bg
               sw, sh = int(OW*PS), int(OH*PS)
               cut_s = cut.resize((sw, sh), Image.LANCZOS)
               canvas = Image.new("RGBA",(OW,OH),(0,0,0,0))
