@@ -1,0 +1,40 @@
+name: Fetch assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "Space-separated URLs to fetch"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Download
+        run: |
+          set -e
+          mkdir -p deliverables/fetched
+          i=0
+          for u in ${{ github.event.inputs.urls }}; do
+            i=$((i+1))
+            curl -sL --max-time 60 "$u" -o "deliverables/fetched/asset_$i" || true
+            ext=$(file -b --mime-type "deliverables/fetched/asset_$i" | cut -d/ -f2)
+            mv "deliverables/fetched/asset_$i" "deliverables/fetched/asset_$i.$ext" || true
+          done
+          ls -la deliverables/fetched
+      - name: Commit
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add deliverables/fetched
+          git commit -m "Fetched assets" || echo nothing
+          for n in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep $((2**n)); done
