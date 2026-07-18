@@ -39,9 +39,9 @@ jobs:
           sess = new_session("u2net_human_seg")
           bg = Image.open("work/bg.png").convert("RGBA")
           import numpy as _np
-          _lip = bg.convert("RGB").crop((640, 918, 1280, 1080))
-          _lr = _np.clip((_np.arange(162)[:,None])*5, 0, 255).astype(_np.uint8)
-          _lipmask = Image.fromarray(_np.repeat(_lr, 640, axis=1), "L")
+          _lip = bg.convert("RGB").crop((700, 795, 1250, 960))
+          _lr = _np.clip((_np.arange(165)[:,None])*5, 0, 255).astype(_np.uint8)
+          _lipmask = Image.fromarray(_np.repeat(_lr, 550, axis=1), "L")
           _edge = _np.full((1080,1920), 255, _np.float32)
           _ramp = _np.linspace(0,255,70)
           _edge[:, :70] = _np.minimum(_edge[:, :70], _ramp[None,:])
@@ -62,16 +62,17 @@ jobs:
           r2,g2,b2,a2 = cut.split()
           a2 = Image.fromarray(_np.minimum(_np.asarray(a2), _edge).astype(_np.uint8), "L")
           cut = Image.merge("RGBA", (r2,g2,b2,a2))
-          PS = 0.39
+          PS = 0.67
           sw, sh = int(OW*PS), int(OH*PS)
           cut_s = cut.resize((sw, sh), Image.LANCZOS)
           canvas = Image.new("RGBA",(OW,OH),(0,0,0,0))
-          canvas.paste(cut_s, (961 - sw//2, 735 - sh), cut_s)
+          canvas.paste(cut_s, (970 - sw//2, 800 - sh), cut_s)
           a_small = canvas.split()[3]
           sa = a_small.filter(ImageFilter.GaussianBlur(22)).point(lambda v: int(v*0.2))
           shadow = Image.new("RGBA",(OW,OH),(0,0,0,0)); shadow.putalpha(sa)
           comp = Image.alpha_composite(bg.copy(), shadow)
           comp = Image.alpha_composite(comp, canvas).convert("RGB")
+          comp.paste(_lip, (700, 795), _lipmask)
           ar = np.asarray(comp).astype(np.float32)
           ar += np.random.normal(0, 2.2, ar.shape)
           comp = Image.fromarray(np.clip(ar,0,255).astype(np.uint8))
