@@ -137,9 +137,9 @@ jobs:
               a2 = Image.fromarray(_np.minimum(_np.asarray(a2), _edge).astype(_np.uint8), "L")
               cut = Image.merge("RGBA", (r2,g2,b2,a2))
               if g < SCENE_SPLIT:
-                  PS, CX, WY, BGSEL = 0.95, 960, 1080, bg
+                  PS, CX, WY, BGSEL = 1.0, 960, 1080, bg
               else:
-                  PS, CX, WY, BGSEL = 0.95, 960, 1080, bg
+                  PS, CX, WY, BGSEL = 1.0, 960, 1080, bg
               sw, sh = int(OW*PS), int(OH*PS)
               cut_s = cut.resize((sw, sh), Image.LANCZOS)
               canvas = Image.new("RGBA",(OW,OH),(0,0,0,0))
