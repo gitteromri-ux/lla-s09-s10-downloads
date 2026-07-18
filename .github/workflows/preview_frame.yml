@@ -47,6 +47,7 @@ jobs:
           _edge[:, :70] = _np.minimum(_edge[:, :70], _ramp[None,:])
           _edge[:, -70:] = _np.minimum(_edge[:, -70:], _ramp[::-1][None,:])
           _edge[:70, :] = _np.minimum(_edge[:70, :], _ramp[:,None])
+          _edge[-50:, :] = _np.minimum(_edge[-50:, :], _np.linspace(255,40,50)[:,None])
           set_mean = np.asarray(bg.convert("RGB")).astype(np.float32).reshape(-1,3).mean(0) + 1e-6
           frame = Image.open("work/frame.png").convert("RGBA")
           cut = remove(frame, session=sess)
@@ -71,8 +72,8 @@ jobs:
           sa = a_small.filter(ImageFilter.GaussianBlur(22)).point(lambda v: int(v*0.2))
           shadow = Image.new("RGBA",(OW,OH),(0,0,0,0)); shadow.putalpha(sa)
           comp = Image.alpha_composite(bg.copy(), shadow)
-          comp = Image.alpha_composite(comp, canvas).convert("RGB")
           comp.paste(_lip, (690, 852), _lipmask)
+          comp = Image.alpha_composite(comp, canvas).convert("RGB")
           ar = np.asarray(comp).astype(np.float32)
           ar += np.random.normal(0, 2.2, ar.shape)
           comp = Image.fromarray(np.clip(ar,0,255).astype(np.uint8))
