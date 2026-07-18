@@ -2,6 +2,11 @@ name: Publish FULL29 (split, no quality loss)
 
 on:
   workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Run id whose Courtney_FULL29_NEWSET artifact to publish"
+        required: false
+        default: "29595238485"
 
 permissions:
   contents: write
@@ -22,7 +27,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: Courtney_FULL29_NEWSET
-          run-id: 29595238485
+          run-id: ${{ github.event.inputs.source_run_id }}
           github-token: ${{ github.token }}
           path: art
 
