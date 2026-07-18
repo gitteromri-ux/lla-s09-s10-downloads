@@ -70,6 +70,7 @@ jobs:
           VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
           echo "VIDEO=$VID" >> $GITHUB_ENV
           ffmpeg -y -i work/plate.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080" work/bg.png
+          ffmpeg -y -i assets/wide_plate.jpg -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080" work/bg_wide.png
 
       - name: Matte + composite chunk ${{ matrix.i }}
         run: |
@@ -85,6 +86,8 @@ jobs:
           SF = int(os.environ["CH_SF"]); TOTAL = int(os.environ["CH_TOTAL"])
           sess = new_session("u2net_human_seg")
           bg = Image.open("work/bg.png").convert("RGBA")
+          bg_wide = Image.open("work/bg_wide.png").convert("RGBA")
+          SCENE_SPLIT = 600  # first 20s = wide opening
           import numpy as _np
           _lip = bg.convert("RGB").crop((640, 918, 1280, 1080))
           _lr = _np.clip((_np.arange(162)[:,None])*5, 0, 255).astype(_np.uint8)
@@ -133,15 +136,18 @@ jobs:
               r2,g2,b2,a2 = cut.split()
               a2 = Image.fromarray(_np.minimum(_np.asarray(a2), _edge).astype(_np.uint8), "L")
               cut = Image.merge("RGBA", (r2,g2,b2,a2))
-              PS = 0.78
+              if g < SCENE_SPLIT:
+                  PS, CX, WY, BGSEL = 0.148, 982, 575, bg_wide
+              else:
+                  PS, CX, WY, BGSEL = 0.55, 968, 720, bg
               sw, sh = int(OW*PS), int(OH*PS)
               cut_s = cut.resize((sw, sh), Image.LANCZOS)
               canvas = Image.new("RGBA",(OW,OH),(0,0,0,0))
-              canvas.paste(cut_s, (968 - sw//2, 892 - sh), cut_s)
+              canvas.paste(cut_s, (CX - sw//2, WY - sh), cut_s)
               a_small = canvas.split()[3]
               sa = a_small.filter(ImageFilter.GaussianBlur(22)).point(lambda v: int(v*0.2))
               shadow = Image.new("RGBA",(OW,OH),(0,0,0,0)); shadow.putalpha(sa)
-              comp = Image.alpha_composite(bg.copy(), shadow)
+              comp = Image.alpha_composite(BGSEL.copy(), shadow)
               comp = Image.alpha_composite(comp, canvas).convert("RGB")
               z = 1.0 + 0.05*min(g/max(TOTAL,1), 1.0)
               zw, zh = int(OW*z), int(OH*z)
