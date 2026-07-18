@@ -19,13 +19,16 @@ jobs:
         with:
           lfs: false
       - name: Download
+        env:
+          URLS: ${{ github.event.inputs.urls }}
         run: |
           set -e
-          mkdir -p deliverables/fetched
+          rm -rf deliverables/fetched && mkdir -p deliverables/fetched
           i=0
-          for u in ${{ github.event.inputs.urls }}; do
+          printf '%s\n' "$URLS" | tr '|' '\n' | while read -r u; do
+            [ -z "$u" ] && continue
             i=$((i+1))
-            curl -sL --max-time 60 "$u" -o "deliverables/fetched/asset_$i" || true
+            curl -sL --max-time 120 "$u" -o "deliverables/fetched/asset_$i" || true
             ext=$(file -b --mime-type "deliverables/fetched/asset_$i" | cut -d/ -f2)
             mv "deliverables/fetched/asset_$i" "deliverables/fetched/asset_$i.$ext" || true
           done
