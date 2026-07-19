@@ -1,0 +1,162 @@
+name: TEST BGSWAP 10s (moving preview, real video)
+
+# 10-second real-footage test of the background-only replace + slight zoom-out,
+# using the committed LFS clip (t=60-70s of 0717). Same math as the FINAL
+# workflow. Single runner, ~8 min. Output committed to this branch (LFS).
+
+on:
+  workflow_dispatch:
+    inputs:
+      zoom:
+        description: "Foreground scale (zoom-out amount)"
+        required: false
+        default: "0.88"
+      bgx:
+        description: "Set-plate crop x0 (plate 2752x1536)"
+        required: false
+        default: "675"
+      bgy:
+        description: "Set-plate crop y0"
+        required: false
+        default: "528"
+      bgw:
+        description: "Set-plate crop width"
+        required: false
+        default: "1300"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg python3-pip
+          pip3 install --quiet "rembg[cpu]" onnxruntime pillow numpy
+
+      - name: Get test clip
+        run: |
+          set -e
+          mkdir -p work out
+          curl -L --fail --retry 5 --retry-delay 5 \
+            "https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/main/deliverables/clips/seg_test.mp4" -o work/seg_test.mp4
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 work/seg_test.mp4
+
+      - name: Matte + composite 10s
+        run: |
+          set -e
+          cat > stream.py <<'PY'
+          import os, subprocess
+          import numpy as np
+          from rembg import remove, new_session
+          from PIL import Image, ImageFilter
+
+          OW, OH, FPS = 1920, 1080, 30
+          ZOOM = float(os.environ["P_ZOOM"])
+          BGX = int(os.environ["P_BGX"]); BGY = int(os.environ["P_BGY"]); BGW = int(os.environ["P_BGW"])
+          BGH = BGW*9//16
+
+          plate = Image.open("assets/plateA_final.png").convert("RGB")
+          bg = plate.crop((BGX, BGY, BGX+BGW, BGY+BGH)).resize((OW,OH), Image.LANCZOS)
+          bg = bg.filter(ImageFilter.GaussianBlur(0.6)).convert("RGBA")
+          bg_np = np.asarray(bg.convert("RGB")).astype(np.float32)
+          set_mean = bg_np.reshape(-1,3).mean(0) + 1e-6
+
+          sw, sh = int(OW*ZOOM), int(OH*ZOOM)
+          px, py = (OW - sw)//2, OH - sh
+
+          sess = new_session("u2net_human_seg")
+          dec = subprocess.Popen(
+              ["ffmpeg","-i","work/seg_test.mp4",
+               "-vf",f"scale={OW}:{OH}:flags=lanczos","-r",str(FPS),
+               "-f","rawvideo","-pix_fmt","rgb24","-"],
+              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+          enc = subprocess.Popen(
+              ["ffmpeg","-y","-f","rawvideo","-pix_fmt","rgb24","-s",f"{OW}x{OH}","-r",str(FPS),"-i","-",
+               "-c:v","libx264","-preset","medium","-crf","16","-pix_fmt","yuv420p",
+               "out/video_noaudio.mp4"],
+              stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+          fsize = OW*OH*3
+          prev_alpha = None
+          i = 0
+          while True:
+              raw = dec.stdout.read(fsize)
+              if len(raw) < fsize: break
+              frame = Image.frombytes("RGB",(OW,OH),raw).convert("RGBA")
+              cut = remove(frame, session=sess)
+              arr = np.asarray(cut).astype(np.float32)
+              rgb, alpha = arr[...,:3], arr[...,3]
+              m = alpha > 8
+              if m.any():
+                  fg_mean = rgb[m].mean(0) + 1e-6
+                  gain = np.clip(1.0 + (set_mean/fg_mean - 1.0)*0.5, 0.92, 1.10)
+                  rgb = np.clip(rgb*gain, 0, 255)
+              if prev_alpha is not None:
+                  alpha = 0.7*alpha + 0.3*prev_alpha
+              prev_alpha = alpha
+              alpha2 = alpha.copy()
+              alpha2[900:] = np.where(alpha2[900:] > 30, 255.0, alpha2[900:])
+              a_img = Image.fromarray(alpha2.astype(np.uint8),"L").filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.7))
+              cut = Image.fromarray(np.dstack([rgb, np.asarray(a_img)[...,None].astype(np.float32)]).astype(np.uint8),"RGBA")
+
+              cut_s = cut.resize((sw, sh), Image.LANCZOS)
+              layer = Image.new("RGBA",(OW,OH),(0,0,0,0))
+              layer.paste(cut_s, (px, py), cut_s)
+
+              sa = layer.split()[3].filter(ImageFilter.GaussianBlur(18)).point(lambda v: int(v*0.25))
+              shadow = Image.new("RGBA",(OW,OH),(0,0,0,0)); shadow.putalpha(sa)
+              comp = Image.alpha_composite(bg.copy(), shadow)
+              comp = Image.alpha_composite(comp, layer).convert("RGB")
+
+              ar = np.asarray(comp).astype(np.float32)
+              ar += np.random.normal(0, 2.0, ar.shape)
+              comp = Image.fromarray(np.clip(ar,0,255).astype(np.uint8))
+              enc.stdin.write(comp.tobytes())
+              i += 1
+              if i % 60 == 0: print("frames", i, flush=True)
+          enc.stdin.close(); enc.wait(); dec.wait()
+          print("TOTAL FRAMES", i, flush=True)
+          PY
+          python3 stream.py
+        env:
+          P_ZOOM: ${{ github.event.inputs.zoom }}
+          P_BGX: ${{ github.event.inputs.bgx }}
+          P_BGY: ${{ github.event.inputs.bgy }}
+          P_BGW: ${{ github.event.inputs.bgw }}
+
+      - name: Mux clip audio (original, untouched)
+        run: |
+          set -e
+          ffmpeg -y -i work/seg_test.mp4 -vn -c:a aac -b:a 256k work/audio.m4a
+          ffmpeg -y -i out/video_noaudio.mp4 -i work/audio.m4a \
+            -c:v copy -c:a aac -b:a 256k -shortest out/test_bgswap_10s.mp4
+          ls -la out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test_bgswap_10s
+          path: out/test_bgswap_10s.mp4
+          if-no-files-found: error
+
+      - name: Commit test clip (LFS, this branch)
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp out/test_bgswap_10s.mp4 deliverables/
+          git add .gitattributes deliverables/test_bgswap_10s.mp4
+          git commit -m "TEST: 10s real-video background swap + zoom-out"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
