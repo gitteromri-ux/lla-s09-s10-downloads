@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<script>
+// shows exactly one card (from ?card=id) fullscreen and plays its entrance animation
+</script>
+<style>
+  :root{--navy:#0E1F48;--deep:#081634;--blue:#006EFF;--bone:#F5F2EA;--lightblue:#7FB2E8;--teal:#63D3C1}
+  @font-face{font-family:'Fraunces';src:url('fonts/Fraunces.ttf');}
+  @font-face{font-family:'Inter';src:url('fonts/Inter.ttf');}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#081634}
+  .card{position:absolute;inset:0;color:var(--bone);
+        background:linear-gradient(180deg,#0D1D44 0%,#081634 100%);
+        display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+        animation:push 3.2s ease-out forwards}
+  .card.on{display:flex}
+  .card::after{content:"";position:absolute;inset:0;pointer-events:none;
+        background:radial-gradient(ellipse 140% 110% at 50% 50%, transparent 55%, rgba(4,10,26,.55) 100%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E")}
+  @keyframes push{from{transform:scale(1.0)}to{transform:scale(1.035)}}
+  @keyframes rise{from{opacity:0;transform:translateY(46px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes fadein{from{opacity:0}to{opacity:1}}
+  @keyframes draw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  .kick{font-family:'Inter';font-weight:700;font-size:30px;letter-spacing:12px;text-transform:uppercase;
+        color:var(--lightblue);opacity:0;animation:fadein .7s ease-out .15s forwards}
+  .rule{width:88px;height:2px;background:var(--teal);margin:44px auto;transform-origin:center;
+        transform:scaleX(0);animation:draw .6s cubic-bezier(.2,.8,.2,1) .55s forwards}
+  .title{font-family:'Fraunces';font-weight:780;line-height:.98;letter-spacing:-2px;width:100%}
+  .title .ln{display:block;opacity:0;animation:rise .8s cubic-bezier(.2,.8,.2,1) forwards}
+  .title .ln:nth-child(1){animation-delay:.7s}
+  .title .ln:nth-child(2){animation-delay:.85s}
+  .title .ln:nth-child(3){animation-delay:1.0s}
+  .title .ln:nth-child(4){animation-delay:1.15s}
+  .title em{font-style:italic;color:var(--lightblue);letter-spacing:0}
+  .cta{font-family:'Fraunces';font-style:italic;font-weight:600;font-size:62px;margin-top:84px;
+       opacity:0;animation:fadein .8s ease-out 1.7s forwards}
+  .cta span{border-bottom:5px solid var(--teal);padding-bottom:12px}
+  .small{font-family:'Inter';font-weight:600;font-size:37px;letter-spacing:4px;opacity:0;margin-top:52px;
+         animation:fadein .8s ease-out 1.5s forwards}
+  .offerline{display:flex;gap:38px;align-items:baseline;justify-content:center;margin-top:26px;
+             opacity:0;animation:rise .8s cubic-bezier(.2,.8,.2,1) .8s forwards}
+  .strike{font-family:'Fraunces';font-weight:700;font-size:130px;text-decoration:line-through;
+          text-decoration-thickness:6px;text-decoration-color:var(--lightblue);opacity:.55}
+  .price{font-family:'Fraunces';font-weight:800;font-size:300px;line-height:1}
+  .price sup{font-size:90px;color:var(--teal)}
+  .foot{position:absolute;bottom:84px;left:0;right:0;font-family:'Inter';font-size:27px;letter-spacing:4px;
+        text-transform:uppercase;opacity:0;animation:fadein .8s ease-out 1.9s forwards}
+  .foot b{color:var(--teal);font-weight:600}
+  .logoimg{width:760px;max-width:88%;opacity:0;animation:rise 1s cubic-bezier(.2,.8,.2,1) .3s forwards}
+  .tagline{font-family:'Fraunces';font-style:italic;font-weight:650;font-size:78px;margin-top:80px;
+           opacity:0;animation:fadein 1s ease-out 1.2s forwards}
+  .sep{margin:0 20px;color:var(--teal)}
+  .v-pad{padding:100px 54px}.h-pad{padding:70px 90px}
+  .v-size .title{font-size:200px}.h-size .title{font-size:196px}
+</style>
+</head>
+<body>
+
+<div class="card v-pad v-size" id="cta1">
+  <div class="kick">Longevity Life Academy</div>
+  <div class="rule"></div>
+  <div class="title"><span class="ln">Your own</span><span class="ln">blueprint for a</span><span class="ln"><em>longer,</em></span><span class="ln"><em>better life.</em></span></div>
+</div>
+
+<div class="card v-pad v-size" id="cta2">
+  <div class="kick">The Method</div>
+  <div class="rule"></div>
+  <div class="title"><span class="ln">Increase</span><span class="ln">your life</span><span class="ln"><em>trajectory.</em></span></div>
+  <div class="small">EAT · SLEEP · MOVE · SUPPLEMENT · HEART · DATA</div>
+</div>
+
+<div class="card v-pad v-size" id="cta3">
+  <div class="kick">20% Off · This Week Only</div>
+  <div class="rule"></div>
+  <div class="offerline"><div class="strike">$1,500</div></div>
+  <div class="offerline" style="animation-delay:1.05s"><div class="price">$1,200<sup>*</sup></div></div>
+  <div class="cta" style="margin-top:70px"><span>Claim your seat</span></div>
+  <div class="foot"><b>18 live sessions</b> · 20% off · this week only</div>
+</div>
+
+<div class="card v-pad v-size" id="end">
+  <img class="logoimg" src="../../assets/lla-logo-transparent@2x.png">
+  <div class="tagline">It's Your Life. <em style="color:#7FB2E8">Live It Well.</em></div>
+  <div class="foot"><b>18 live sessions</b> <span class="sep">·</span> 6 pillars <span class="sep">·</span> <b>$1,500 → $1,200</b></div>
+</div>
+
+<script>
+const p = new URLSearchParams(location.search);
+const id = p.get('card') || 'cta1';
+const el = document.getElementById(id);
+el.classList.add('on');
+const horiz = p.get('o') === 'h';
+if (horiz) { el.classList.remove('v-pad','v-size'); el.classList.add('h-pad','h-size'); }
+</script>
+</body>
+</html>
