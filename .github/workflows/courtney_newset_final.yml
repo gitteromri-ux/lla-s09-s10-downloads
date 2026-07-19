@@ -99,11 +99,14 @@ jobs:
           import numpy as _np
           # lap/legs occluder strip from the keyframe, drawn OVER her lower edge
           _lapfull = Image.open("work/lap.png").convert("RGBA")
-          LAP0 = max(870, WY - 60); RAMP = 50
+          LAP0 = max(870, WY - 45); RAMP = 30
           _lap = _lapfull.crop((0, LAP0, 1920, 1080))
           _la = _np.full((1080-LAP0, 1920), 255, _np.float32)
           _la[:RAMP] = _np.linspace(0,255,RAMP)[:,None]
           _lap.putalpha(Image.fromarray(_la.astype(_np.uint8)))
+          # continuity: camera monitor must show HER (from keyframe), not the empty room
+          _mon = (1585, 635, 1775, 780)
+          bg.paste(_lapfull.crop(_mon), _mon)
           # source-border fade (sides/top)
           _edge = _np.full((1080,1920), 255, _np.float32)
           _ramp = _np.linspace(0,255,70)
@@ -143,6 +146,8 @@ jobs:
               if prev_alpha is not None:
                   alpha = 0.7*alpha + 0.3*prev_alpha
               prev_alpha = alpha
+              # solidify her lower body: no translucency where the matte weakens near frame bottom
+              alpha[850:] = np.where(alpha[850:] > 30, 255.0, alpha[850:])
               a_img = Image.fromarray(alpha.astype(np.uint8),"L").filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.7))
               cut = Image.fromarray(np.dstack([rgb, np.asarray(a_img)[...,None].astype(np.float32)]).astype(np.uint8),"RGBA")
               # measured fit: fade source borders, align over AI body
