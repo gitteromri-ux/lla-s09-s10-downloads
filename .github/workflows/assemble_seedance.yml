@@ -1,0 +1,89 @@
+name: Assemble Seedance final (0717, 7 min)
+
+# Downloads all rendered Seedance chunk URLs (in order), concats, muxes the
+# real monologue audio, publishes to the delivery page + LFS.
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls_json:
+        description: "JSON array of chunk result URLs, in chunk order"
+        required: true
+      out_name:
+        description: "Output basename"
+        required: false
+        default: "Courtney_CINEMA_FINAL_0717"
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Download chunks + assemble
+        env:
+          URLS: ${{ github.event.inputs.urls_json }}
+          OUT: ${{ github.event.inputs.out_name }}
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg jq git-lfs
+          mkdir -p chunks out deliverables/qc_cinema
+          echo "$URLS" > urls.json
+          N=$(jq length urls.json)
+          for idx in $(seq 0 $((N-1))); do
+            U=$(jq -r ".[$idx]" urls.json)
+            II=$(printf "%02d" "$idx")
+            curl -sS -L --fail --retry 4 --retry-delay 3 "$U" -o "chunks/c_${II}.mp4"
+            echo "file '$PWD/chunks/c_${II}.mp4'" >> list.txt
+          done
+          ffmpeg -y -loglevel error -f concat -safe 0 -i list.txt -c copy out/video_noaudio.mp4 || \
+            ffmpeg -y -loglevel error -f concat -safe 0 -i list.txt -c:v libx264 -preset medium -crf 16 -pix_fmt yuv420p out/video_noaudio.mp4
+          # real monologue audio (committed by chunks_put)
+          test -f deliverables/audio_full_0717.m4a
+          ffmpeg -y -loglevel error -i out/video_noaudio.mp4 -i deliverables/audio_full_0717.m4a \
+            -c:v copy -c:a aac -b:a 256k -map 0:v -map 1:a -shortest "out/${OUT}.mp4"
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "out/${OUT}.mp4"
+          # QC stills every ~45s
+          DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "out/${OUT}.mp4")
+          for p in 2 45 90 135 180 225 270 315 360 400; do
+            ffmpeg -y -loglevel error -ss "$p" -i "out/${OUT}.mp4" -frames:v 1 "deliverables/qc_cinema/qc_${p}.jpg" || true
+          done
+      - name: Add page card + upload artifact + commit
+        env:
+          OUT: ${{ github.event.inputs.out_name }}
+        run: |
+          set -e
+          python3 - <<PY
+          import os
+          out = os.environ["OUT"]
+          html = open('index.html').read()
+          if out not in html:
+              url = f"https://media.githubusercontent.com/media/gitteromri-ux/lla-s09-s10-downloads/main/deliverables/{out}.mp4"
+              sec = ('\n<h2>&#127902; CINEMA MASTER &middot; Courtney (0717)</h2>\n'
+                     '<p class="sec-note">Higgsfield cinema set &middot; real performance &middot; original monologue &middot; 1080p</p>\n'
+                     '<div class="grid">\n<div class="card"><h3>Courtney &middot; Cinema Master</h3><div class="meta">FINAL &middot; 1080p</div>\n'
+                     f'<video src="{url}" autoplay muted loop playsinline controls preload="metadata"></video>\n'
+                     f'<div class="btn-row"><a class="btn" href="{url}" download>&#11015; Download</a></div></div>\n</div>\n')
+              i = html.find('class="lede"')
+              j = html.find('</p>', i) + 4
+              open('index.html','w').write(html[:j] + sec + html[j:])
+              print("page card added")
+          PY
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp "out/${OUT}.mp4" deliverables/
+          git add .gitattributes index.html "deliverables/${OUT}.mp4" deliverables/qc_cinema
+          git commit -m "CINEMA FINAL: ${OUT} (Seedance pipeline)"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.out_name }}
+          path: out/*.mp4
+          if-no-files-found: error
