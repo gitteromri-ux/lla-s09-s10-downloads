@@ -36,13 +36,18 @@ jobs:
 
       - name: Fetch reference videos
         run: |
-          set -e
           mkdir -p refs analysis
           fetch_yt() {
-            yt-dlp -f "bv*[height<=480]+ba/b[height<=480]/b" --merge-output-format mp4 \
-              --extractor-args "youtube:player_client=android,web" \
-              -o "refs/$2.mp4" "$1" || \
-            yt-dlp -f "b" -o "refs/$2.mp4" "$1"
+            for CL in tv ios web_safari android; do
+              yt-dlp -f "bv*[height<=480]+ba/b[height<=480]/b" --merge-output-format mp4 \
+                --js-runtimes node \
+                --extractor-args "youtube:player_client=$CL" \
+                --sleep-requests 1 \
+                -o "refs/$2.mp4" "$1" && break
+              echo "client $CL failed for $2, trying next"
+              sleep 5
+            done
+            [ -f "refs/$2.mp4" ] || { echo "$2: ALL CLIENTS FAILED" | tee -a analysis/fetch_errors.txt; return 0; }
             yt-dlp --dump-json --no-download "$1" | python3 -c "
           import json,sys
           d=json.load(sys.stdin)
@@ -55,8 +60,8 @@ jobs:
 
       - name: Cut detection + contact sheets
         run: |
-          set -e
           for R in ref1 ref2; do
+            [ -f "refs/$R.mp4" ] || { echo "skip $R (not fetched)"; continue; }
             # cut timestamps
             ffmpeg -i "refs/$R.mp4" -vf "select='gt(scene,0.28)',showinfo" -f null - 2>&1 | \
               grep showinfo | grep -oE 'pts_time:[0-9.]+' | cut -d: -f2 > "analysis/${R}_cuts.txt" || true
