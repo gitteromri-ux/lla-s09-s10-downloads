@@ -3,7 +3,7 @@ name: ASSEMBLE 90s ad draft (auto edit v1)
 # Machine-assembles the Courtney 90s ad from the hub plan:
 # razors her blocks (audio continuous), cuts b-roll over the visuals at the
 # planned phrases, inserts CTA cards at 23/54/77/end, Atelier silence mix.
-# Output: deliverables/Courtney_AD90_DRAFT1.mp4 (LFS, this branch).
+# Output: deliverables/Courtney_AD90_DRAFT2.mp4 (LFS, this branch).
 
 on:
   workflow_dispatch:
@@ -75,7 +75,7 @@ jobs:
           # ACT II - turn 53.8-67.16 (13.36s): yoga first, then her
           broll(nx(), "site_yoga", 4.0, 53.8, 0.0)
           her(nx(), 57.8, 9.36)
-          cardseg(nx(), "production/cards/png/horizontal/cta1_h.png", 2.5)
+          cardseg(nx(), "production/cards/png/horizontal/cta1_h.png", 2.0)
           # ACT III - pillars 127.34-146.88 (19.54s)
           her(nx(), 127.34, 8.0)
           broll(nx(), "site_nutrition", 2.3, 127.34, 8.0)
@@ -86,7 +86,7 @@ jobs:
           # 18 lessons 154.36-161.8 (7.44s)
           broll(nx(), "site_wearables", 3.7, 154.36, 0.0)
           her(nx(), 158.06, 3.74)
-          cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 2.5)
+          cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 2.0)
           # ACT IV - proof 170.4-183.28 (12.88s)
           her(nx(), 170.4, 4.0)
           broll(nx(), "data_curve", 5.0, 170.4, 4.0)
@@ -94,9 +94,9 @@ jobs:
           # ACT V - offer 204.92-212.96 (8.04s)
           broll(nx(), "site_protocol", 4.0, 204.92, 0.0)
           her(nx(), 208.92, 4.04)
-          cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 2.5)
+          cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 2.0)
           # ACT VI - close take 4: 378.48-402.32 (23.84s)
-          her(nx(), 378.48, 23.84)
+          her(nx(), 383.0, 19.32)
           cardseg(nx(), "production/cards/png/horizontal/end_h.png", 3.0)
 
           with open("list.txt","w") as f:
@@ -105,16 +105,16 @@ jobs:
           subprocess.run([FF,"-y","-f","concat","-safe","0","-i","list.txt",
               "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
               "-c:a","aac","-b:a","256k","-movflags","+faststart",
-              "Courtney_AD90_DRAFT1.mp4"],check=True)
+              "Courtney_AD90_DRAFT2.mp4"],check=True)
           subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size",
-              "-of","default=noprint_wrappers=1","Courtney_AD90_DRAFT1.mp4"])
+              "-of","default=noprint_wrappers=1","Courtney_AD90_DRAFT2.mp4"])
           PY
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Courtney_AD90_DRAFT1
-          path: Courtney_AD90_DRAFT1.mp4
+          name: Courtney_AD90_DRAFT2
+          path: Courtney_AD90_DRAFT2.mp4
           if-no-files-found: error
 
       - name: Commit (LFS)
@@ -124,9 +124,9 @@ jobs:
           git config user.email "actions@github.com"
           git lfs install
           mkdir -p deliverables
-          cp Courtney_AD90_DRAFT1.mp4 deliverables/
-          git add deliverables/Courtney_AD90_DRAFT1.mp4
-          git commit -m "ASSEMBLED: 90s ad draft v1 (auto edit)"
+          cp Courtney_AD90_DRAFT2.mp4 deliverables/
+          git add deliverables/Courtney_AD90_DRAFT2.mp4
+          git commit -m "ASSEMBLED: 90s ad draft v2 (final cards, tightened)"
           for n in 1 2 3 4; do
             git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
           done
