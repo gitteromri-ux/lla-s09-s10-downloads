@@ -45,7 +45,7 @@ jobs:
           jq -c '.[]' plan.json | while read -r row; do
             I=$(echo "$row" | jq -r .i); SS=$(echo "$row" | jq -r .ss); T=$(echo "$row" | jq -r .t); U=$(echo "$row" | jq -r .url)
             II=$(printf "%02d" "$I")
-            ffmpeg -y -loglevel error -ss "$SS" -t "$T" -i "$VID" \
+            ffmpeg -nostdin -y -loglevel error -ss "$SS" -t "$T" -i "$VID" \
               -vf "$CROP" -r 30 -an \
               -c:v libx264 -preset fast -crf 18 "segs/seg_${II}.mp4"
             curl -sS --fail -X PUT -H "Content-Type: video/mp4" \
