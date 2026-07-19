@@ -31,6 +31,10 @@ on:
         description: "Drive file id of the 0717 source zip"
         required: false
         default: "1S2FCA5SuOwGUPJNDyGpcqQ7zqS3151yU"
+      source_url:
+        description: "Direct/WeTransfer URL of the source (takes precedence over drive_id)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -52,19 +56,42 @@ jobs:
         run: |
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip python3-pip
-          pip3 install --quiet gdown
-          for n in 1 2 3 4 5 6; do
-            gdown "$GD_URL" -O 0717.zip || \
-              curl -sL "$ZIP_URL" -o 0717.zip || true
-            if unzip -t 0717.zip >/dev/null 2>&1; then break; fi
-            echo "=== Drive fetch failed (attempt $n). Server response was: ==="
-            head -c 2000 0717.zip || true
-            echo; echo "=== end response ==="
-            sleep $((n*20))
-          done
-          unzip -t 0717.zip >/dev/null 2>&1 || { echo "FATAL: Drive refuses to serve the file"; exit 9; }
-          mkdir -p src srcvid && unzip -o 0717.zip -d src
-          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
+          SRC_URL='${{ github.event.inputs.source_url }}'
+          mkdir -p src srcvid
+          if [ -n "$SRC_URL" ]; then
+            echo "Using direct source URL"
+            case "$SRC_URL" in
+              *wetransfer.com*|*we.tl*)
+                pip3 install --quiet transferwee
+                python3 -m transferwee download "$SRC_URL" || transferwee download "$SRC_URL"
+                DL=$(ls -S | head -1); mv "$DL" source_dl
+                ;;
+              *)
+                curl -L --fail --retry 5 --retry-delay 5 "$SRC_URL" -o source_dl
+                ;;
+            esac
+            file source_dl
+            if unzip -t source_dl >/dev/null 2>&1; then
+              unzip -o source_dl -d src
+            else
+              mv source_dl src/source_video.bin
+            fi
+          else
+            pip3 install --quiet gdown
+            for n in 1 2 3 4 5 6; do
+              gdown "$GD_URL" -O 0717.zip || \
+                curl -sL "$ZIP_URL" -o 0717.zip || true
+              if unzip -t 0717.zip >/dev/null 2>&1; then break; fi
+              echo "=== Drive fetch failed (attempt $n). Server response was: ==="
+              head -c 2000 0717.zip || true
+              echo; echo "=== end response ==="
+              sleep $((n*20))
+            done
+            unzip -t 0717.zip >/dev/null 2>&1 || { echo "FATAL: Drive refuses to serve the file"; exit 9; }
+            unzip -o 0717.zip -d src
+          fi
+          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.bin' \) | sort -k1 | head -1)
+          ffprobe -v error -show_entries stream=codec_type -of csv=p=0 "$VID" | grep -q video || { echo "FATAL: downloaded file is not a video"; exit 9; }
           cp "$VID" "srcvid/source$(echo "$VID" | grep -oE '\.[a-zA-Z0-9]+$')"
           D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$VID")
           python3 - "$D" <<'PY'
