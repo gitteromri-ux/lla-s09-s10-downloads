@@ -14,19 +14,19 @@ on:
       zoom:
         description: "Foreground scale (zoom-out amount)"
         required: true
-        default: "0.88"
+        default: "0.82"
       bgx:
         description: "Set-plate crop x0 (plate 2752x1536)"
         required: true
-        default: "675"
+        default: "60"
       bgy:
         description: "Set-plate crop y0"
         required: true
-        default: "528"
+        default: "470"
       bgw:
         description: "Set-plate crop width"
         required: true
-        default: "1300"
+        default: "1140"
       drive_id:
         description: "Drive file id of the 0717 source zip"
         required: false
@@ -146,6 +146,19 @@ jobs:
           px, py = (OW - sw)//2, OH - sh
 
           sess = new_session("u2net_human_seg")
+
+          # static sofa mask (orig 1920x1080 coords): couch + pillows region,
+          # feathered; right side fades out before the scaled-layer edge cut
+          SOFA = np.zeros((OH, OW), np.float32)
+          SOFA[585:, 520:] = 255.0
+          _ramp_t = np.linspace(0, 255, 50)
+          SOFA[585:635, 520:] = np.minimum(SOFA[585:635, 520:], _ramp_t[:, None])
+          _ramp_l = np.linspace(0, 255, 60)
+          SOFA[585:, 520:580] = np.minimum(SOFA[585:, 520:580], _ramp_l[None, :])
+          _ramp_r = np.linspace(255, 0, 60)
+          SOFA[585:, 1860:] = np.minimum(SOFA[585:, 1860:], _ramp_r[None, :])
+          from PIL import Image as _I
+          SOFA = np.asarray(_I.fromarray(SOFA.astype(np.uint8)).filter(ImageFilter.GaussianBlur(6))).astype(np.float32)
           dec = subprocess.Popen(
               ["ffmpeg","-ss",str(SS),"-t",str(T),"-i",VIDEO,
                "-vf",f"scale={OW}:{OH}:flags=lanczos","-r",str(FPS),
@@ -169,6 +182,9 @@ jobs:
               cut = remove(frame, session=sess)
               arr = np.asarray(cut).astype(np.float32)
               rgb, alpha = arr[...,:3], arr[...,3]
+              # union with her REAL SOFA (static mask - camera and sofa are static):
+              # she keeps sitting on her own couch, transplanted into the set
+              alpha = np.maximum(alpha, SOFA)
               m = alpha > 8
               if m.any():
                   fg_mean = rgb[m].mean(0) + 1e-6
