@@ -1,6 +1,6 @@
-PS=0.5731
-CX=906
-WY=993
-paste_top=375
+PS=0.5786
+CX=913
+WY=998
+paste_top=374
 key_head=(406,125,971)
 src_head=(40,229,1072)
