@@ -86,10 +86,17 @@ jobs:
           SOFA[585:635, 530:] = np.minimum(SOFA[585:635, 530:], _ramp_t[:, None])
           _ramp_l = np.linspace(0, 255, 50)
           SOFA[585:, 530:580] = np.minimum(SOFA[585:, 530:580], _ramp_l[None, :])
-          _ramp_r = np.linspace(255, 0, 60)
-          SOFA[585:, 1860:] = np.minimum(SOFA[585:, 1860:], _ramp_r[None, :])
+          # wider right fade: kill the visible rectangular step against the set chair
+          _ramp_r = np.linspace(255, 0, 140)
+          SOFA[585:, 1780:] = np.minimum(SOFA[585:, 1780:], _ramp_r[None, :])
+          # wider left fade low in frame: the dark couch corner melts into set shadow
+          _ramp_bl = np.linspace(0, 255, 130)
+          SOFA[900:, 530:660] = np.minimum(SOFA[900:, 530:660], _ramp_bl[None, :])
           from PIL import Image as _I
           SOFA = np.asarray(_I.fromarray(SOFA.astype(np.uint8)).filter(ImageFilter.GaussianBlur(4))).astype(np.float32)
+          # forbidden zone: the white desk corner left of her - only near-solid person
+          # alpha survives here, killing the torn white shards
+          DESK = np.zeros((OH, OW), np.float32); DESK[440:760, 340:640] = 1.0
           dec = subprocess.Popen(
               ["ffmpeg","-i","work/seg_test.mp4",
                "-vf",f"scale={OW}:{OH}:flags=lanczos","-r",str(FPS),
@@ -124,6 +131,10 @@ jobs:
               if prev_alpha is not None:
                   alpha = 0.7*alpha + 0.3*prev_alpha
               prev_alpha = alpha
+              # kill faint leaks: ghost trails and desk shards are semi-transparent,
+              # real body/sofa pixels are near-opaque
+              alpha = np.where((DESK > 0) & (alpha < 150), 0.0, alpha)
+              alpha = np.where(alpha < 45, 0.0, alpha)
               alpha2 = alpha.copy()
               alpha2[900:] = np.where(alpha2[900:] > 30, 255.0, alpha2[900:])
               a_img = Image.fromarray(alpha2.astype(np.uint8),"L").filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.7))
