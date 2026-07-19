@@ -29,9 +29,9 @@ jobs:
         run: |
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip jq python3-pip
-          pip3 install --quiet transferwee || pip3 install --quiet git+https://github.com/iamleot/transferwee.git
-          transferwee download "${{ github.event.inputs.wt_url }}" 2>/dev/null || \
-            python3 -c "import transferwee,sys; transferwee.download(sys.argv[1])" "${{ github.event.inputs.wt_url }}"
+          pip3 install --quiet requests
+          curl -sSL --fail https://raw.githubusercontent.com/iamleot/transferwee/master/transferwee.py -o tw.py
+          python3 tw.py download "${{ github.event.inputs.wt_url }}"
           ls -la
           F=$(ls -S | head -1)
           echo "Downloaded: $F"
