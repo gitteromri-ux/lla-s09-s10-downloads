@@ -30,7 +30,8 @@ jobs:
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip jq python3-pip
           pip3 install --quiet transferwee || pip3 install --quiet git+https://github.com/iamleot/transferwee.git
-          python3 -m transferwee download "${{ github.event.inputs.wt_url }}"
+          transferwee download "${{ github.event.inputs.wt_url }}" 2>/dev/null || \
+            python3 -c "import transferwee,sys; transferwee.download(sys.argv[1])" "${{ github.event.inputs.wt_url }}"
           ls -la
           F=$(ls -S | head -1)
           echo "Downloaded: $F"
