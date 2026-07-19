@@ -58,10 +58,18 @@ jobs:
                 f"seg/{idx:02d}.mp4"],check=True)
 
           def cardseg(idx, png, dur):
-              subprocess.run([FF,"-y","-loop","1","-t",str(dur),"-i",png,
-                "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
-                "-vf",f"scale={W}:{H},fps={FPS}","-c:v","libx264","-crf","17","-preset","fast",
-                "-c:a","aac","-shortest",f"seg/{idx:02d}.mp4"],check=True)
+              cid = png.split("/")[-1].replace("_h.png","").replace(".png","")
+              anim = f"production/cards/anim/{cid}_h.mp4"
+              if os.path.exists(anim):
+                  subprocess.run([FF,"-y","-t",str(dur),"-i",anim,
+                    "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
+                    "-vf",f"scale={W}:{H},fps={FPS}","-c:v","libx264","-crf","17","-preset","fast",
+                    "-c:a","aac","-shortest",f"seg/{idx:02d}.mp4"],check=True)
+              else:
+                  subprocess.run([FF,"-y","-loop","1","-t",str(dur),"-i",png,
+                    "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
+                    "-vf",f"scale={W}:{H},fps={FPS}","-c:v","libx264","-crf","17","-preset","fast",
+                    "-c:a","aac","-shortest",f"seg/{idx:02d}.mp4"],check=True)
 
           i=0
           def nx():
@@ -76,7 +84,7 @@ jobs:
           her(nx(), 53.8, 3.0)
           broll(nx(), "noise_off", 4.0, 53.8, 3.0)
           broll(nx(), "path_dawn", 6.36, 53.8, 7.0)
-          cardseg(nx(), "production/cards/png/horizontal/cta1_h.png", 1.5)
+          cardseg(nx(), "production/cards/png/horizontal/cta1_h.png", 2.2)
           # ACT III - pillars 127.34-146.88 (19.54s)
           her(nx(), 127.34, 6.0)
           broll(nx(), "site_nutrition", 2.2, 127.34, 6.0)
@@ -84,7 +92,7 @@ jobs:
           broll(nx(), "site_yoga", 2.2, 127.34, 10.4)
           broll(nx(), "site_supplements", 2.2, 127.34, 12.6)
           broll(nx(), "site_coldplunge", 2.2, 127.34, 14.8)
-          cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 1.5)
+          cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 2.2)
           # ACT IV - proof 170.4-183.28 (12.88s)
           her(nx(), 170.4, 4.0)
           broll(nx(), "data_curve", 5.0, 170.4, 4.0)
@@ -92,7 +100,7 @@ jobs:
           # ACT V - offer 204.92-212.96 (8.04s)
           broll(nx(), "site_ctabg", 4.0, 204.92, 0.0)
           her(nx(), 208.92, 4.04)
-          cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 2.2)
+          cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 2.8)
           # ACT VI - close: her truth -> THE EMPTY SEAT on "there's a seat for you" -> her sign-off
           her(nx(), 383.0, 11.4)
           broll(nx(), "seat_light", 3.56, 383.0, 11.4)
