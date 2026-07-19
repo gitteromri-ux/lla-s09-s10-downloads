@@ -1,0 +1,121 @@
+name: Probe sources (quota status + 29min containment)
+
+# 1) Re-tests whether the 0717 zip ids are still quota-locked.
+# 2) Tests the 29-min master id; if downloadable, locates the 7-min 0717 cut
+#    inside it via audio cross-correlation against the committed 10s clip
+#    (deliverables/clips/seg_test.mp4 = t=60-70s of 0717), and commits
+#    comparison frames + a report for QC.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  ID_0717_A: "1VyhOqzO5FuHcnSRKzDpA40AK_4hJkqSQ"
+  ID_0717_B: "1S2FCA5SuOwGUPJNDyGpcqQ7zqS3151yU"
+  ID_29MIN: "1y2Q8zy9HWmMF7bmKZYe96ioQ5QirXU7o"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip python3-pip
+          pip3 install --quiet numpy
+
+      - name: Probe all sources
+        run: |
+          set -e
+          mkdir -p probe deliverables/probe
+          fetch() {
+            curl -sL "https://drive.usercontent.google.com/download?id=$1&export=download&confirm=t" -o "$2"
+          }
+          status() {
+            if unzip -t "$1" >/dev/null 2>&1; then echo OK; else
+              if grep -q "Quota exceeded" "$1" 2>/dev/null; then echo QUOTA; else echo JUNK; fi
+            fi
+          }
+          echo "== probe report ==" > deliverables/probe/probe_report.txt
+          fetch "$ID_0717_A" probe/a.bin; echo "0717 original: $(status probe/a.bin)" >> deliverables/probe/probe_report.txt
+          fetch "$ID_0717_B" probe/b.bin; echo "0717 copy:     $(status probe/b.bin)" >> deliverables/probe/probe_report.txt
+          rm -f probe/a.bin probe/b.bin
+          fetch "$ID_29MIN" probe/m.bin
+          M=$(status probe/m.bin); echo "29min master:  $M" >> deliverables/probe/probe_report.txt
+          cat deliverables/probe/probe_report.txt
+          echo "M29=$M" >> $GITHUB_ENV
+
+      - name: If 0717 unlocked, stop here (report says OK)
+        run: cat deliverables/probe/probe_report.txt
+
+      - name: Locate 0717 inside 29min (only if 29min OK)
+        if: always()
+        run: |
+          set -e
+          if [ "$M29" != "OK" ]; then echo "29min not downloadable, skipping"; exit 0; fi
+          mkdir -p src29
+          unzip -o -q probe/m.bin -d src29 || cp probe/m.bin src29/full29.mp4
+          V29=$(find src29 -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' \) | head -1)
+          echo "V29=$V29" >> $GITHUB_ENV
+          ffprobe -v error -show_entries format=duration -of csv=p=0 "$V29" | tee -a deliverables/probe/probe_report.txt
+          curl -sL --fail "https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/main/deliverables/clips/seg_test.mp4" -o probe/seg_test.mp4
+          ffmpeg -y -i probe/seg_test.mp4 -ac 1 -ar 8000 -f f32le probe/ref.pcm 2>/dev/null
+          ffmpeg -y -i "$V29" -ac 1 -ar 8000 -f f32le probe/full.pcm 2>/dev/null
+          python3 - <<'PY'
+          import numpy as np
+          ref = np.fromfile("probe/ref.pcm", np.float32)
+          full = np.fromfile("probe/full.pcm", np.float32)
+          ref = (ref - ref.mean()) / (ref.std() + 1e-9)
+          n = len(full) + len(ref)
+          F = np.fft.rfft(full, n); R = np.fft.rfft(ref[::-1], n)
+          xc = np.fft.irfft(F * R, n)
+          # normalized by local energy
+          win = np.convolve(full**2, np.ones(len(ref)), "full")[:len(xc)]
+          nxc = xc / (np.sqrt(win * (ref**2).sum()) + 1e-6)
+          peak = int(np.argmax(nxc)); score = float(nxc[peak])
+          t0 = (peak - len(ref) + 1) / 8000.0
+          with open("deliverables/probe/probe_report.txt", "a") as f:
+              f.write(f"xcorr: seg_test(t=60s of 0717) found at t={t0:.2f}s of 29min, score={score:.3f}\n")
+              f.write(f"implied 0717 start in 29min: {t0-60:.2f}s\n")
+          print("t0", t0, "score", score)
+          open("probe/t0.txt","w").write(str(t0))
+          PY
+          T0=$(cat probe/t0.txt)
+          for dt in 1 5 9; do
+            TS=$(python3 -c "print($T0 + $dt)")
+            ffmpeg -y -ss "$TS" -i "$V29" -frames:v 1 -vf scale=1920:1080 "deliverables/probe/m29_t${dt}.jpg" 2>/dev/null
+            ffmpeg -y -ss "$dt" -i probe/seg_test.mp4 -frames:v 1 "deliverables/probe/seg_t${dt}.jpg" 2>/dev/null
+          done
+          python3 - <<'PY'
+          import numpy as np
+          from PIL import Image
+          import glob
+          with open("deliverables/probe/probe_report.txt","a") as f:
+              for dt in (1,5,9):
+                  try:
+                      a = np.asarray(Image.open(f"deliverables/probe/m29_t{dt}.jpg").convert("L").resize((480,270)), np.float32)
+                      b = np.asarray(Image.open(f"deliverables/probe/seg_t{dt}.jpg").convert("L").resize((480,270)), np.float32)
+                      d = float(np.abs(a-b).mean())
+                      f.write(f"frame diff at +{dt}s: MAD={d:.1f} (identical-take < 8, different shot > 25)\n")
+                  except Exception as e:
+                      f.write(f"frame diff at +{dt}s: error {e}\n")
+          PY
+          cat deliverables/probe/probe_report.txt
+
+      - name: Commit probe results
+        if: always()
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add deliverables/probe/
+          git commit -m "Probe: source quota status + 29min containment check" || echo "nothing to commit"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
