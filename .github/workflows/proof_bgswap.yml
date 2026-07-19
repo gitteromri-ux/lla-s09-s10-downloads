@@ -1,0 +1,132 @@
+name: Proof BGSWAP (background-only replace + slight zoom-out)
+
+# NEW SIMPLE APPROACH (client-ordered):
+#   - Take the ORIGINAL 0717 frame exactly as filmed. No embedding, no re-placement.
+#   - Matte Courtney per-frame; replace ONLY the static background with a
+#     close-up crop of the client's set (assets/plateA_final.png).
+#   - Scale her whole layer down slightly (zoom-out), anchored bottom-center.
+#   - Zero changes to her placement, performance or appearance otherwise.
+# Fast: uses the committed 10s LFS clip (t=60-70s), no Drive download.
+
+on:
+  workflow_dispatch:
+    inputs:
+      t:
+        description: "Timestamp (s) inside seg_test clip"
+        required: false
+        default: "2"
+      zoom:
+        description: "Foreground scale (zoom-out amount, e.g. 0.88)"
+        required: false
+        default: "0.88"
+      bgx:
+        description: "Set-plate crop x0 (px, plate is 2752x1536)"
+        required: false
+        default: "675"
+      bgy:
+        description: "Set-plate crop y0"
+        required: false
+        default: "528"
+      bgw:
+        description: "Set-plate crop width"
+        required: false
+        default: "1300"
+
+permissions:
+  contents: write
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg python3-pip
+          pip3 install --quiet "rembg[cpu]" onnxruntime pillow numpy
+
+      - name: Get test clip + extract frame
+        run: |
+          set -e
+          mkdir -p work
+          curl -L --fail --retry 5 --retry-delay 5 \
+            "https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/main/deliverables/clips/seg_test.mp4" -o work/seg_test.mp4
+          ffmpeg -y -ss "${{ github.event.inputs.t }}" -i work/seg_test.mp4 -frames:v 1 \
+            -vf scale=1920:1080:flags=lanczos work/src_frame.png
+
+      - name: Composite (background-only replace)
+        run: |
+          set -e
+          python3 <<'PY'
+          import numpy as np
+          from rembg import remove, new_session
+          from PIL import Image, ImageFilter
+
+          W,H = 1920,1080
+          ZOOM = float("${{ github.event.inputs.zoom }}")
+          BGX  = int("${{ github.event.inputs.bgx }}")
+          BGY  = int("${{ github.event.inputs.bgy }}")
+          BGW  = int("${{ github.event.inputs.bgw }}")
+          BGH  = BGW*9//16
+
+          # background: close-up crop of the client's set plate
+          plate = Image.open("assets/plateA_final.png").convert("RGB")
+          print("plate size", plate.size)
+          bg = plate.crop((BGX, BGY, BGX+BGW, BGY+BGH)).resize((W,H), Image.LANCZOS)
+          bg = bg.filter(ImageFilter.GaussianBlur(0.6))
+          bg_np = np.asarray(bg).astype(np.float32)
+          set_mean = bg_np.reshape(-1,3).mean(0) + 1e-6
+
+          # foreground: the original frame, matted — HER PIXELS UNTOUCHED in placement
+          sess = new_session("u2net_human_seg")
+          frame = Image.open("work/src_frame.png").convert("RGBA")
+          cut = remove(frame, session=sess)
+          arr = np.asarray(cut).astype(np.float32)
+          rgb, alpha = arr[...,:3], arr[...,3]
+          m = alpha > 8
+          if m.any():
+              fg_mean = rgb[m].mean(0) + 1e-6
+              gain = np.clip(1.0 + (set_mean/fg_mean - 1.0)*0.5, 0.92, 1.10)
+              rgb = np.clip(rgb*gain, 0, 255)
+          # solidify lower body near frame bottom (matte weakens there)
+          alpha[900:] = np.where(alpha[900:] > 30, 255.0, alpha[900:])
+          a_img = Image.fromarray(alpha.astype(np.uint8),"L").filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.7))
+          cut = Image.fromarray(np.dstack([rgb, np.asarray(a_img)[...,None].astype(np.float32)]).astype(np.uint8),"RGBA")
+
+          # slight zoom-out: scale whole fg layer down, anchor bottom-center
+          sw, sh = int(W*ZOOM), int(H*ZOOM)
+          cut_s = cut.resize((sw, sh), Image.LANCZOS)
+          px, py = (W - sw)//2, H - sh
+          layer = Image.new("RGBA",(W,H),(0,0,0,0))
+          layer.paste(cut_s, (px, py), cut_s)
+
+          # soft contact shadow onto the set
+          sa = layer.split()[3].filter(ImageFilter.GaussianBlur(18)).point(lambda v: int(v*0.25))
+          shadow = Image.new("RGBA",(W,H),(0,0,0,0)); shadow.putalpha(sa)
+          comp = Image.alpha_composite(bg.convert("RGBA"), shadow)
+          comp = Image.alpha_composite(comp, layer).convert("RGB")
+
+          out = np.asarray(comp).astype(np.float32)
+          out = np.clip(out + np.random.normal(0, 2.0, out.shape), 0, 255).astype(np.uint8)
+          import os; os.makedirs("deliverables", exist_ok=True)
+          Image.fromarray(out).save("deliverables/proof_bgswap.jpg", quality=92)
+          with open("deliverables/proof_bgswap_params.txt","w") as f:
+              f.write(f"ZOOM={ZOOM}\nBGX={BGX}\nBGY={BGY}\nBGW={BGW}\n")
+          print("PROOF DONE")
+          PY
+
+      - name: Commit proof
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add deliverables/proof_bgswap.jpg deliverables/proof_bgswap_params.txt
+          git commit -m "Proof: background-only swap + slight zoom-out"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
