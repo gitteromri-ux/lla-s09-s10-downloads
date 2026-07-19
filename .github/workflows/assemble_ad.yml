@@ -3,7 +3,7 @@ name: ASSEMBLE 90s ad draft (auto edit v1)
 # Machine-assembles the Courtney 90s ad from the hub plan:
 # razors her blocks (audio continuous), cuts b-roll over the visuals at the
 # planned phrases, inserts CTA cards at 23/54/77/end, Atelier silence mix.
-# Output: deliverables/Courtney_AD90_DRAFT2.mp4 (LFS, this branch).
+# Output: deliverables/Courtney_AD90_DRAFT3.mp4 (LFS, this branch).
 
 on:
   workflow_dispatch:
@@ -29,7 +29,7 @@ jobs:
           mkdir -p work
           M="https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}"
           curl -sL --fail "$M/deliverables/Courtney_BGSWAP_0717.mp4" -o work/base.mp4
-          for c in capsules_macro oximeter_data site_supplements site_yoga site_ctabg site_nutrition site_sleep site_coldplunge site_wearables data_curve site_protocol swimmer_dawn; do
+          for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol; do
             curl -sL --fail "$M/production/footage/clips/$c.mp4" -o "work/$c.mp4"
           done
           ls -la work
@@ -67,14 +67,15 @@ jobs:
           def nx():
               global i; i+=1; return i
 
-          # ACT I - hook 37.4-53.8 (16.4s): her 4s, then broll with her audio
+          # ACT I - hook: her -> the NOISE itself (doomscroll) -> selling -> back to her
           her(nx(), 37.4, 4.0)
-          broll(nx(), "capsules_macro", 4.5, 37.4, 4.0)
-          broll(nx(), "oximeter_data", 3.5, 37.4, 8.5)
-          broll(nx(), "site_supplements", 4.4, 37.4, 12.0)
-          # ACT II - turn 53.8-67.16 (13.36s): yoga first, then her
-          broll(nx(), "site_yoga", 4.0, 53.8, 0.0)
-          her(nx(), 57.8, 9.36)
+          broll(nx(), "noise_scroll", 6.0, 37.4, 4.0)
+          broll(nx(), "capsules_macro", 3.4, 37.4, 10.0)
+          her(nx(), 50.8, 3.0)
+          # ACT II - turn: "Take a breath" on her -> phone down -> THE PATH on "direct path"
+          her(nx(), 53.8, 3.0)
+          broll(nx(), "noise_off", 4.0, 53.8, 3.0)
+          broll(nx(), "path_dawn", 6.36, 53.8, 7.0)
           cardseg(nx(), "production/cards/png/horizontal/cta1_h.png", 2.0)
           # ACT III - pillars 127.34-146.88 (19.54s)
           her(nx(), 127.34, 8.0)
@@ -83,8 +84,8 @@ jobs:
           broll(nx(), "site_yoga", 2.3, 127.34, 12.6)
           broll(nx(), "site_supplements", 2.3, 127.34, 14.9)
           broll(nx(), "site_coldplunge", 2.34, 127.34, 17.2)
-          # 18 lessons 154.36-161.8 (7.44s)
-          broll(nx(), "site_wearables", 3.7, 154.36, 0.0)
+          # 18 lessons: the daily protocol/plan visual
+          broll(nx(), "site_protocol", 3.7, 154.36, 0.0)
           her(nx(), 158.06, 3.74)
           cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 2.0)
           # ACT IV - proof 170.4-183.28 (12.88s)
@@ -92,11 +93,13 @@ jobs:
           broll(nx(), "data_curve", 5.0, 170.4, 4.0)
           her(nx(), 179.4, 3.88)
           # ACT V - offer 204.92-212.96 (8.04s)
-          broll(nx(), "site_protocol", 4.0, 204.92, 0.0)
+          broll(nx(), "site_ctabg", 4.0, 204.92, 0.0)
           her(nx(), 208.92, 4.04)
           cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 2.0)
-          # ACT VI - close take 4: 378.48-402.32 (23.84s)
-          her(nx(), 383.0, 19.32)
+          # ACT VI - close: her truth -> THE EMPTY SEAT on "there's a seat for you" -> her sign-off
+          her(nx(), 383.0, 11.4)
+          broll(nx(), "seat_light", 3.56, 383.0, 11.4)
+          her(nx(), 397.96, 4.36)
           cardseg(nx(), "production/cards/png/horizontal/end_h.png", 3.0)
 
           with open("list.txt","w") as f:
@@ -105,16 +108,16 @@ jobs:
           subprocess.run([FF,"-y","-f","concat","-safe","0","-i","list.txt",
               "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
               "-c:a","aac","-b:a","256k","-movflags","+faststart",
-              "Courtney_AD90_DRAFT2.mp4"],check=True)
+              "Courtney_AD90_DRAFT3.mp4"],check=True)
           subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size",
-              "-of","default=noprint_wrappers=1","Courtney_AD90_DRAFT2.mp4"])
+              "-of","default=noprint_wrappers=1","Courtney_AD90_DRAFT3.mp4"])
           PY
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Courtney_AD90_DRAFT2
-          path: Courtney_AD90_DRAFT2.mp4
+          name: Courtney_AD90_DRAFT3
+          path: Courtney_AD90_DRAFT3.mp4
           if-no-files-found: error
 
       - name: Commit (LFS)
@@ -124,9 +127,9 @@ jobs:
           git config user.email "actions@github.com"
           git lfs install
           mkdir -p deliverables
-          cp Courtney_AD90_DRAFT2.mp4 deliverables/
-          git add deliverables/Courtney_AD90_DRAFT2.mp4
-          git commit -m "ASSEMBLED: 90s ad draft v2 (final cards, tightened)"
+          cp Courtney_AD90_DRAFT3.mp4 deliverables/
+          git add deliverables/Courtney_AD90_DRAFT3.mp4
+          git commit -m "ASSEMBLED: 90s ad draft v3 (line-correlated footage)"
           for n in 1 2 3 4; do
             git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
           done
