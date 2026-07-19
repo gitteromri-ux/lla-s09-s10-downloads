@@ -32,19 +32,21 @@ jobs:
       - name: Cut and PUT
         run: |
           set -e
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip jq
-          curl -L --fail --retry 5 --retry-delay 5 \
-            "https://drive.usercontent.google.com/download?id=${{ github.event.inputs.src_id }}&export=download&confirm=t" -o 0717.zip
-          mkdir -p src segs
-          unzip -o -q 0717.zip -d src
-          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' \) | head -1)
-          ffprobe -v error -show_entries format=duration -of csv=p=0 "$VID"
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg jq
+          mkdir -p segs
+          curl -sS -L --fail --retry 4 --retry-delay 5 \
+            "https://media.githubusercontent.com/media/${{ github.repository }}/main/deliverables/Courtney_NEWSET_FINAL_0717.mp4" -o comp.mp4
+          ffprobe -v error -show_entries format=duration -of csv=p=0 comp.mp4
+          VID=comp.mp4
+          # Her exact placement in the composite: paste box (358,374) 1110x624 @ zoom<=1.05.
+          # Crop a safe region around her, denoise+sharpen, upscale to 1080p driver.
+          CROP="crop=1260:710:300:330,hqdn3d=2:1:3:3,scale=1920:1080:flags=lanczos,unsharp=5:5:0.6:5:5:0.0"
           cp "${{ github.event.inputs.plan_path }}" plan.json
           jq -c '.[]' plan.json | while read -r row; do
             I=$(echo "$row" | jq -r .i); SS=$(echo "$row" | jq -r .ss); T=$(echo "$row" | jq -r .t); U=$(echo "$row" | jq -r .url)
             II=$(printf "%02d" "$I")
             ffmpeg -y -loglevel error -ss "$SS" -t "$T" -i "$VID" \
-              -vf scale=1920:1080:flags=lanczos -r 30 -an \
+              -vf "$CROP" -r 30 -an \
               -c:v libx264 -preset fast -crf 18 "segs/seg_${II}.mp4"
             curl -sS --fail -X PUT -H "Content-Type: video/mp4" \
               --data-binary "@segs/seg_${II}.mp4" "$U" -o /dev/null -w "seg_${II} HTTP %{http_code}\n"
@@ -54,9 +56,8 @@ jobs:
         if: ${{ github.event.inputs.extract_audio == 'true' }}
         run: |
           set -e
-          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' \) | head -1)
           mkdir -p deliverables
-          ffmpeg -y -loglevel error -i "$VID" -vn -c:a aac -b:a 256k deliverables/audio_full_0717.m4a
+          ffmpeg -y -loglevel error -i comp.mp4 -vn -c:a aac -b:a 256k deliverables/audio_full_0717.m4a
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add deliverables/audio_full_0717.m4a
