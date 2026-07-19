@@ -88,40 +88,57 @@ jobs:
           def nx():
               global i; i+=1; return i
 
-          # ACT I - hook: her -> the NOISE itself (doomscroll) -> selling -> back to her
-          her(nx(), 37.4, 4.0)
-          broll(nx(), "noise_scroll", 5.0, 37.4, 4.0)
-          broll(nx(), "capsules_macro", 2.4, 37.4, 9.0)
-          her(nx(), 48.8, 5.0)
-          # ACT II - turn: "Take a breath" on her -> phone down -> THE PATH on "direct path"
+          # ===== FULL MONOLOGUE - FA measured grammar (b-roll singles on her words) =====
+          # A · HOOK + TURN (her full text 37.4-69.68)
+          her(nx(), 37.4, 6.24)                                   # "a thousand voices"
+          broll(nx(), "noise_scroll", 5.28, 37.4, 6.24)           # "every influencer...contradicting"
+          broll(nx(), "capsules_macro", 2.28, 37.4, 11.52)        # "all quietly selling"
+          her(nx(), 51.2, 2.64)                                   # "No wonder you're overwhelmed"
           mark("breath")
-          her(nx(), 53.8, 3.0)
-          broll(nx(), "noise_off", 4.0, 53.8, 3.0)
-          broll(nx(), "path_dawn", 6.36, 53.8, 7.0)
+          her(nx(), 53.84, 2.2)                                   # "Take a breath"
+          broll(nx(), "noise_off", 2.16, 53.84, 2.2)              # "put the noise down"
+          broll(nx(), "path_dawn", 3.96, 53.84, 4.36)             # "the direct path to longevity"
+          her(nx(), 62.16, 7.52)                                  # "calmly...walk you through it"
           cardseg(nx(), "production/cards/png/horizontal/cta1_h.png", 3.0)
-          # ACT III - pillars 127.34-146.88 (19.54s)
-          her(nx(), 127.34, 6.0)
-          broll(nx(), "site_nutrition", 2.2, 127.34, 6.0)
-          broll(nx(), "site_sleep", 2.2, 127.34, 8.2)
-          broll(nx(), "site_yoga", 2.2, 127.34, 10.4)
-          broll(nx(), "site_supplements", 2.2, 127.34, 12.6)
-          broll(nx(), "site_coldplunge", 2.2, 127.34, 14.8)
+          # B · NOT YOUR FAULT (74.28-102.8, full incl. furniture line)
+          her(nx(), 74.28, 7.88)                                  # "why it never stuck...whole picture"
+          broll(nx(), "site_mental", 5.56, 74.28, 7.88)           # "fragments, one gadget at a time"
+          her(nx(), 87.72, 6.28)                                  # furniture + "didn't lack willpower"
+          her(nx(), 94.0, 2.68)                                   # "you lacked a clear path"
+          broll(nx(), "path_dawn", 6.12, 94.0, 2.68)              # "one you could truly follow...taught"
           cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 3.0)
-          # ACT IV - proof 170.4-183.28 (12.88s)
+          # C · SIX PILLARS (127.34-161.8, take 2 full; singles land on her words)
+          her(nx(), 127.34, 7.74)                                 # "whole path...real curriculum"
+          her(nx(), 135.08, 1.12)                                 # "not a pile of tips,"
+          broll(nx(), "site_nutrition", 1.3, 135.08, 1.12)        # "nutrition"
+          broll(nx(), "site_sleep", 1.4, 135.08, 2.42)            # "sleep"
+          broll(nx(), "site_yoga", 1.58, 135.08, 3.82)            # "movement"
+          broll(nx(), "site_supplements", 2.16, 140.48, 0.0)      # "strategic supplementation"
+          broll(nx(), "site_coldplunge", 1.56, 142.64, 0.0)       # "protect your heart"
+          broll(nx(), "site_wearables", 2.68, 144.2, 0.0)         # "understand your numbers"
+          her(nx(), 146.88, 7.48)                                 # "master them in order...sequenced"
+          broll(nx(), "site_protocol", 3.16, 154.36, 0.0)         # "18 lessons week by week"
+          her(nx(), 157.52, 4.28)                                 # "your tailored longevity blueprint"
+          # D · PROOF (165.64-190.76 full)
+          her(nx(), 165.64, 4.76)                                 # "not opinions or trend of the month"
+          broll(nx(), "data_curve", 3.76, 165.64, 4.76)           # "Harvard checked 120,000 adults"
           mark("harvard0")
-          her(nx(), 170.4, 4.0)
-          broll(nx(), "data_curve", 5.0, 170.4, 4.0)
-          her(nx(), 179.4, 3.88)
+          her(nx(), 174.16, 9.12)                                 # "five habits...14 extra years" - HER FACE
           mark("harvard1")
-          # ACT V - offer 204.92-212.96 (8.04s)
-          broll(nx(), "site_ctabg", 4.0, 204.92, 0.0)
-          her(nx(), 208.92, 4.04)
+          broll(nx(), "food_flatlay", 2.72, 174.16, 9.12)         # "science did the hard part"
+          her(nx(), 186.0, 4.76)                                  # "our whole job is to teach you"
+          # E · OFFER (195.36-222.16 full)
+          her(nx(), 195.36, 9.56)                                 # "That's exactly what LLA is..."
+          broll(nx(), "site_ctabg", 3.12, 195.36, 9.56)           # "18 live sessions raise your hand"
+          her(nx(), 208.04, 4.92)                                 # "real coaching meets you where you are"
+          broll(nx(), "swimmer_dawn", 3.44, 208.04, 4.92)         # "your own numbers turned into"
+          her(nx(), 216.4, 5.76)                                  # "a personal protocol...walks the path with you"
           cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 3.0)
-          # ACT VI - close: her truth -> THE EMPTY SEAT on "there's a seat for you" -> her sign-off
-          her(nx(), 383.0, 11.4)
+          # F · CLOSE (take 4 full 378.48-402.32)
+          her(nx(), 378.48, 15.92)                                # "honest truth...while you walk it"
           mark("classlift")
-          broll(nx(), "seat_light", 3.56, 383.0, 11.4)
-          her(nx(), 397.96, 4.36)
+          broll(nx(), "seat_light", 3.56, 378.48, 15.92)          # "Class is in session...a seat for you"
+          her(nx(), 397.96, 4.36)                                 # "I'm Courtney. This is LLA."
           cardseg(nx(), "production/cards/png/horizontal/outro_h.png", 4.2)
 
           with open("list.txt","w") as f:
@@ -205,7 +222,7 @@ jobs:
           cp Courtney_AD90_FINAL.mp4 deliverables/
           cp EDIT_AUDIT.md production/EDIT_AUDIT.md || true
           git add deliverables/Courtney_AD90_FINAL.mp4 production/EDIT_AUDIT.md
-          git commit -m "ASSEMBLED: 90s FINAL: Atelier structure, single CTA, graded"
+          git commit -m "ASSEMBLED: FULL-TEXT FINAL: entire monologue, FA-measured grammar"
           for n in 1 2 3 4; do
             git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
           done
