@@ -46,12 +46,18 @@ jobs:
         id: mk
         run: |
           set -e
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip
-          for n in 1 2 3 4 5 6 7 8; do
-            curl -L --fail --retry 3 --retry-delay 5 "$ZIP_URL" -o 0717.zip || true
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip python3-pip
+          pip3 install --quiet gdown
+          for n in 1 2 3 4 5 6; do
+            gdown --fuzzy "https://drive.google.com/uc?id=1VyhOqzO5FuHcnSRKzDpA40AK_4hJkqSQ" -O 0717.zip || \
+              curl -sL "$ZIP_URL" -o 0717.zip || true
             if unzip -t 0717.zip >/dev/null 2>&1; then break; fi
-            echo "Drive served junk (attempt $n), retrying..."; sleep $((n*15))
+            echo "=== Drive fetch failed (attempt $n). Server response was: ==="
+            head -c 2000 0717.zip || true
+            echo; echo "=== end response ==="
+            sleep $((n*20))
           done
+          unzip -t 0717.zip >/dev/null 2>&1 || { echo "FATAL: Drive refuses to serve the file"; exit 9; }
           mkdir -p src srcvid && unzip -o 0717.zip -d src
           VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
           cp "$VID" "srcvid/source$(echo "$VID" | grep -oE '\.[a-zA-Z0-9]+$')"
