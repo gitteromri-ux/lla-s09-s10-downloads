@@ -27,12 +27,17 @@ on:
         description: "Set-plate crop width"
         required: true
         default: "1300"
+      drive_id:
+        description: "Drive file id of the 0717 source zip"
+        required: false
+        default: "1S2FCA5SuOwGUPJNDyGpcqQ7zqS3151yU"
 
 permissions:
   contents: write
 
 env:
-  ZIP_URL: "https://drive.usercontent.google.com/download?id=1VyhOqzO5FuHcnSRKzDpA40AK_4hJkqSQ&export=download&confirm=t"
+  ZIP_URL: "https://drive.usercontent.google.com/download?id=${{ github.event.inputs.drive_id }}&export=download&confirm=t"
+  GD_URL: "https://drive.google.com/uc?id=${{ github.event.inputs.drive_id }}"
 
 jobs:
   setup:
@@ -49,7 +54,7 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip python3-pip
           pip3 install --quiet gdown
           for n in 1 2 3 4 5 6; do
-            gdown --fuzzy "https://drive.google.com/uc?id=1VyhOqzO5FuHcnSRKzDpA40AK_4hJkqSQ" -O 0717.zip || \
+            gdown "$GD_URL" -O 0717.zip || \
               curl -sL "$ZIP_URL" -o 0717.zip || true
             if unzip -t 0717.zip >/dev/null 2>&1; then break; fi
             echo "=== Drive fetch failed (attempt $n). Server response was: ==="
