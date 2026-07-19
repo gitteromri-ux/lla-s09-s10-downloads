@@ -1,0 +1,71 @@
+name: WeTransfer source + cut + PUT chunks
+
+on:
+  workflow_dispatch:
+    inputs:
+      wt_url:
+        description: "WeTransfer link (we.tl/...)"
+        required: true
+      plan_path:
+        description: "Repo path to JSON array of {i, ss, t, url}"
+        required: true
+      extract_audio:
+        description: "Also extract+commit full audio (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+jobs:
+  wt_cut_put:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Download from WeTransfer
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip jq python3-pip
+          pip3 install --quiet transferwee || pip3 install --quiet git+https://github.com/iamleot/transferwee.git
+          python3 -m transferwee download "${{ github.event.inputs.wt_url }}"
+          ls -la
+          F=$(ls -S | head -1)
+          echo "Downloaded: $F"
+          mkdir -p src
+          case "$F" in
+            *.zip) unzip -o -q "$F" -d src ;;
+            *) cp "$F" src/ ;;
+          esac
+          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | sort -rn | head -1)
+          if [ -z "$VID" ]; then echo "NO VIDEO FOUND"; find src -type f | head; exit 1; fi
+          echo "VIDEO=$VID" >> $GITHUB_ENV
+          ffprobe -v error -show_entries format=duration -show_entries stream=width,height -of default=noprint_wrappers=1 "$VID"
+      - name: Cut + PUT
+        run: |
+          set -e
+          mkdir -p segs
+          cp "${{ github.event.inputs.plan_path }}" plan.json
+          jq -c '.[]' plan.json | while read -r row; do
+            I=$(echo "$row" | jq -r .i); SS=$(echo "$row" | jq -r .ss); T=$(echo "$row" | jq -r .t); U=$(echo "$row" | jq -r .url)
+            II=$(printf "%02d" "$I")
+            ffmpeg -nostdin -y -loglevel error -ss "$SS" -t "$T" -i "$VIDEO" \
+              -vf scale=1920:1080:flags=lanczos -r 30 -an \
+              -c:v libx264 -preset fast -crf 18 "segs/seg_${II}.mp4"
+            curl -sS --fail -X PUT -H "Content-Type: video/mp4" \
+              --data-binary "@segs/seg_${II}.mp4" "$U" -o /dev/null -w "seg_${II} HTTP %{http_code}\n"
+          done
+          echo "ALL PUTS DONE"
+      - name: Extract + commit full audio
+        if: ${{ github.event.inputs.extract_audio == 'true' }}
+        run: |
+          set -e
+          mkdir -p deliverables
+          ffmpeg -nostdin -y -loglevel error -i "$VIDEO" -vn -c:a aac -b:a 256k deliverables/audio_full_0717.m4a
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add deliverables/audio_full_0717.m4a
+          git commit -m "Full monologue audio (pristine WeTransfer source)"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || sleep $((2**n)); done
