@@ -51,12 +51,14 @@ jobs:
           os.makedirs("seg", exist_ok=True)
 
           def her(idx, ss, dur):
+              TL.append(dur)
               # her video+audio segment from base
               subprocess.run([FF,"-y","-ss",str(ss),"-t",str(dur),"-i","work/base.mp4",
                 "-vf",f"scale={W}:{H},fps={FPS},colorbalance=rh=.04:gh=.02:bs=-.04,eq=contrast=1.06:saturation=1.02,vignette=PI/5,noise=alls=4:allf=t+u","-c:v","libx264","-crf","17","-preset","fast",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:02d}.mp4"],check=True)
 
           def broll(idx, clip, dur, a_ss, a_dur_off):
+              TL.append(dur)
               # b-roll visual + HER AUDIO underneath (audio from base at a_ss+a_dur_off)
               subprocess.run([FF,"-y","-stream_loop","-1","-t",str(dur),"-i",f"work/{clip}.mp4",
                 "-ss",str(a_ss+a_dur_off),"-t",str(dur),"-i","work/base.mp4",
@@ -65,6 +67,7 @@ jobs:
                 f"seg/{idx:02d}.mp4"],check=True)
 
           def cardseg(idx, png, dur):
+              TL.append(dur)
               cid = png.split("/")[-1].replace("_h.png","").replace(".png","")
               anim = f"work/anim_{cid}_h.mp4"
               if os.path.exists(anim):
@@ -79,6 +82,9 @@ jobs:
                     "-c:a","aac","-shortest",f"seg/{idx:02d}.mp4"],check=True)
 
           i=0
+          TL = []      # planned duration per segment, in order
+          MARKS = {}   # named emotional beats -> timeline seconds
+          def mark(name): MARKS[name] = sum(TL)
           def nx():
               global i; i+=1; return i
 
@@ -88,6 +94,7 @@ jobs:
           broll(nx(), "capsules_macro", 2.4, 37.4, 9.0)
           her(nx(), 48.8, 5.0)
           # ACT II - turn: "Take a breath" on her -> phone down -> THE PATH on "direct path"
+          mark("breath")
           her(nx(), 53.8, 3.0)
           broll(nx(), "noise_off", 4.0, 53.8, 3.0)
           broll(nx(), "path_dawn", 6.36, 53.8, 7.0)
@@ -101,15 +108,18 @@ jobs:
           broll(nx(), "site_coldplunge", 2.2, 127.34, 14.8)
           cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 3.0)
           # ACT IV - proof 170.4-183.28 (12.88s)
+          mark("harvard0")
           her(nx(), 170.4, 4.0)
           broll(nx(), "data_curve", 5.0, 170.4, 4.0)
           her(nx(), 179.4, 3.88)
+          mark("harvard1")
           # ACT V - offer 204.92-212.96 (8.04s)
           broll(nx(), "site_ctabg", 4.0, 204.92, 0.0)
           her(nx(), 208.92, 4.04)
           cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 3.0)
           # ACT VI - close: her truth -> THE EMPTY SEAT on "there's a seat for you" -> her sign-off
           her(nx(), 383.0, 11.4)
+          mark("classlift")
           broll(nx(), "seat_light", 3.56, 383.0, 11.4)
           her(nx(), 397.96, 4.36)
           cardseg(nx(), "production/cards/png/horizontal/outro_h.png", 4.2)
@@ -138,10 +148,16 @@ jobs:
           if _os.path.exists("work/bed.mp3"):
               c1,c2,c3,c4 = (card_ts + [20,50,75,85])[:4]
               # keyframed envelope with 0.5s linear ramps (an editor's fader, not a switch)
-              keys = [(0,0.10),(8,0.14),(c1-0.5,0.14),(c1,0.42),(c1+2.6,0.42),(c1+3.2,0.14),
-                      (c2-0.5,0.14),(c2,0.42),(c2+2.6,0.42),(c2+3.2,0.14),
-                      (c3-1.6,0.14),(c3-1.1,0.02),(c3-0.05,0.02),(c3,0.5),(c3+2.8,0.5),
-                      (c4-0.5,0.2),(c4,0.55),(T,0.55)]
+              br = MARKS.get("breath", 14)
+              h0 = MARKS.get("harvard0", 48); h1 = MARKS.get("harvard1", 58)
+              cl = MARKS.get("classlift", T-12)
+              keys = [(0,0.10),(br-0.4,0.12),(br+0.3,0.04),(br+2.8,0.04),        # the exhale: true near-silence
+                      (c1-0.6,0.30),(c1,0.45),(c1+2.6,0.45),(c1+3.2,0.16),       # promise card swell
+                      (c2-0.6,0.22),(c2,0.45),(c2+2.6,0.45),(c2+3.2,0.16),       # blueprint card swell
+                      (h0-0.3,0.16),(h0+0.4,0.05),(h1-0.2,0.05),(h1+0.8,0.2),    # Harvard number lands dry
+                      (c3-1.6,0.14),(c3-1.1,0.02),(c3-0.05,0.02),(c3,0.5),(c3+2.8,0.5),  # offer silence -> hit
+                      (cl-0.3,0.18),(cl,0.3),                                     # "Class is in session" lift
+                      (c4-0.5,0.26),(c4,0.55),(T,0.55)]
               expr = f"{keys[-1][1]:.3f}"
               for (t0,v0),(t1,v1) in reversed(list(zip(keys, keys[1:]))):
                   seg_expr = f"({v0:.3f}+({v1:.3f}-{v0:.3f})*(t-{t0:.2f})/{max(t1-t0,0.01):.2f})"
