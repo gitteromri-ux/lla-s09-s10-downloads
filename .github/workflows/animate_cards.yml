@@ -40,7 +40,7 @@ jobs:
           base = "file://" + str(pathlib.Path("production/cards/anim.html").resolve())
           os.makedirs("production/cards/anim", exist_ok=True)
           jobs = []
-          for cid in ("cta1","cta2","cta3","end"):
+          for cid in ("cta1","cta2","cta3","end","outro"):
               jobs.append((cid, "h", 1920, 1080))
               jobs.append((cid, "v", 1080, 1920))
           with sync_playwright() as p:
@@ -52,12 +52,12 @@ jobs:
                                       record_video_size={"width":w,"height":h})
                   pg = ctx.new_page()
                   pg.goto(f"{base}?card={cid}&o={o}")
-                  pg.wait_for_timeout(3600)
+                  pg.wait_for_timeout(4600 if cid=="outro" else 3600)
                   ctx.close()
                   webm = glob.glob(f"{vdir}/*.webm")[0]
                   out = f"production/cards/anim/{cid}_{o}.mp4"
                   subprocess.run(["ffmpeg","-y","-i",webm,
-                      "-vf",f"scale={w}:{h},fps=30","-ss","0.3","-t","3.0",
+                      "-vf",f"scale={w}:{h},fps=30","-ss","0.3","-t",("4.2" if cid=="outro" else "3.0"),
                       "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
                       "-an",out],check=True)
                   shutil.rmtree(vdir)
