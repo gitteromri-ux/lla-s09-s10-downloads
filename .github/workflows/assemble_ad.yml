@@ -3,7 +3,7 @@ name: ASSEMBLE 90s ad draft (auto edit v1)
 # Machine-assembles the Courtney 90s ad from the hub plan:
 # razors her blocks (audio continuous), cuts b-roll over the visuals at the
 # planned phrases, inserts CTA cards at 23/54/77/end, Atelier silence mix.
-# Output: deliverables/Courtney_AD90_DRAFT4.mp4 (LFS, this branch).
+# Output: deliverables/Courtney_AD90_FINAL.mp4 (LFS, this branch).
 
 on:
   workflow_dispatch:
@@ -69,25 +69,22 @@ jobs:
 
           # ACT I - hook: her -> the NOISE itself (doomscroll) -> selling -> back to her
           her(nx(), 37.4, 4.0)
-          broll(nx(), "noise_scroll", 6.0, 37.4, 4.0)
-          broll(nx(), "capsules_macro", 3.4, 37.4, 10.0)
-          her(nx(), 50.8, 3.0)
+          broll(nx(), "noise_scroll", 5.0, 37.4, 4.0)
+          broll(nx(), "capsules_macro", 2.4, 37.4, 9.0)
+          her(nx(), 48.8, 5.0)
           # ACT II - turn: "Take a breath" on her -> phone down -> THE PATH on "direct path"
           her(nx(), 53.8, 3.0)
           broll(nx(), "noise_off", 4.0, 53.8, 3.0)
           broll(nx(), "path_dawn", 6.36, 53.8, 7.0)
-          cardseg(nx(), "production/cards/png/horizontal/cta1_h.png", 2.0)
+          cardseg(nx(), "production/cards/png/horizontal/cta1_h.png", 1.5)
           # ACT III - pillars 127.34-146.88 (19.54s)
-          her(nx(), 127.34, 8.0)
-          broll(nx(), "site_nutrition", 2.3, 127.34, 8.0)
-          broll(nx(), "site_sleep", 2.3, 127.34, 10.3)
-          broll(nx(), "site_yoga", 2.3, 127.34, 12.6)
-          broll(nx(), "site_supplements", 2.3, 127.34, 14.9)
-          broll(nx(), "site_coldplunge", 2.34, 127.34, 17.2)
-          # 18 lessons: the daily protocol/plan visual
-          broll(nx(), "site_protocol", 3.7, 154.36, 0.0)
-          her(nx(), 158.06, 3.74)
-          cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 2.0)
+          her(nx(), 127.34, 6.0)
+          broll(nx(), "site_nutrition", 2.2, 127.34, 6.0)
+          broll(nx(), "site_sleep", 2.2, 127.34, 8.2)
+          broll(nx(), "site_yoga", 2.2, 127.34, 10.4)
+          broll(nx(), "site_supplements", 2.2, 127.34, 12.6)
+          broll(nx(), "site_coldplunge", 2.2, 127.34, 14.8)
+          cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 1.5)
           # ACT IV - proof 170.4-183.28 (12.88s)
           her(nx(), 170.4, 4.0)
           broll(nx(), "data_curve", 5.0, 170.4, 4.0)
@@ -95,7 +92,7 @@ jobs:
           # ACT V - offer 204.92-212.96 (8.04s)
           broll(nx(), "site_ctabg", 4.0, 204.92, 0.0)
           her(nx(), 208.92, 4.04)
-          cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 2.0)
+          cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 2.2)
           # ACT VI - close: her truth -> THE EMPTY SEAT on "there's a seat for you" -> her sign-off
           her(nx(), 383.0, 11.4)
           broll(nx(), "seat_light", 3.56, 383.0, 11.4)
@@ -108,16 +105,16 @@ jobs:
           subprocess.run([FF,"-y","-f","concat","-safe","0","-i","list.txt",
               "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
               "-c:a","aac","-b:a","256k","-movflags","+faststart",
-              "Courtney_AD90_DRAFT4.mp4"],check=True)
+              "Courtney_AD90_FINAL.mp4"],check=True)
           subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size",
-              "-of","default=noprint_wrappers=1","Courtney_AD90_DRAFT4.mp4"])
+              "-of","default=noprint_wrappers=1","Courtney_AD90_FINAL.mp4"])
           PY
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Courtney_AD90_DRAFT4
-          path: Courtney_AD90_DRAFT4.mp4
+          name: Courtney_AD90_FINAL
+          path: Courtney_AD90_FINAL.mp4
           if-no-files-found: error
 
       - name: Commit (LFS)
@@ -127,9 +124,9 @@ jobs:
           git config user.email "actions@github.com"
           git lfs install
           mkdir -p deliverables
-          cp Courtney_AD90_DRAFT4.mp4 deliverables/
-          git add deliverables/Courtney_AD90_DRAFT4.mp4
-          git commit -m "ASSEMBLED: 90s ad draft v4 (cinematic grade pass)"
+          cp Courtney_AD90_FINAL.mp4 deliverables/
+          git add deliverables/Courtney_AD90_FINAL.mp4
+          git commit -m "ASSEMBLED: 90s FINAL: Atelier structure, single CTA, graded"
           for n in 1 2 3 4; do
             git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
           done
