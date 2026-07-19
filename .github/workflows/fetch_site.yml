@@ -1,0 +1,69 @@
+name: Fetch brand site imagery
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Site URL"
+        required: false
+        default: "https://www.longevitylifeacademy.com"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Fetch homepage + imagery
+        env:
+          SITE: ${{ github.event.inputs.site }}
+        run: |
+          set -e
+          mkdir -p analysis/site
+          UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+          curl -sL -A "$UA" "$SITE" -o analysis/site/home.html || true
+          ls -la analysis/site/home.html
+          python3 - <<'PY'
+          import re, os, subprocess
+          html = open('analysis/site/home.html', encoding='utf-8', errors='ignore').read()
+          urls = re.findall(r'(https?://[^\s"\'<>]+?\.(?:jpg|jpeg|png|webp)[^\s"\'<>]*)', html)
+          # also srcset and og:image
+          urls += re.findall(r'content="(https?://[^"]+?\.(?:jpg|jpeg|png|webp)[^"]*)"', html)
+          seen, picked = set(), []
+          for u in urls:
+              base = u.split('?')[0]
+              if base in seen: continue
+              seen.add(base); picked.append(u)
+          print("found", len(picked), "images")
+          open('analysis/site/image_urls.txt','w').write('\n'.join(picked))
+          UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0"
+          for i, u in enumerate(picked[:16]):
+              ext = u.split('?')[0].rsplit('.',1)[-1]
+              subprocess.run(['curl','-sL','-A',UA,u,'-o',f'analysis/site/img_{i:02d}.{ext}'], timeout=60)
+          PY
+          # keep only files under 5MB, list
+          find analysis/site -size +5M -delete || true
+          # strip html to text for messaging themes
+          python3 - <<'PY'
+          import re
+          html = open('analysis/site/home.html', encoding='utf-8', errors='ignore').read()
+          txt = re.sub(r'<script.*?</script>|<style.*?</style>', ' ', html, flags=re.S)
+          txt = re.sub(r'<[^>]+>', ' ', txt)
+          txt = re.sub(r'\s+', ' ', txt)
+          open('analysis/site/home_text.txt','w').write(txt[:20000])
+          PY
+          ls -la analysis/site
+      - name: Commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add analysis/site
+          git commit -m "Brand site imagery + copy for style analysis" || echo nothing
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
