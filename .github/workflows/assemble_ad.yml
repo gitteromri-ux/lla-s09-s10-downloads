@@ -134,14 +134,16 @@ jobs:
           import os as _os
           if _os.path.exists("work/bed.mp3"):
               c1,c2,c3,c4 = (card_ts + [20,50,75,85])[:4]
-              env = (f"volume='if(lt(t,{c1-0.4:.2f}),0.14,"
-                     f"if(lt(t,{c1+3:.2f}),0.42,"
-                     f"if(lt(t,{c2-0.4:.2f}),0.14,"
-                     f"if(lt(t,{c2+3:.2f}),0.42,"
-                     f"if(lt(t,{c3-1.2:.2f}),0.14,"
-                     f"if(lt(t,{c3:.2f}),0.02,"
-                     f"if(lt(t,{c3+3:.2f}),0.5,"
-                     f"if(lt(t,{c4:.2f}),0.16,0.55))))))))':eval=frame")
+              # keyframed envelope with 0.5s linear ramps (an editor's fader, not a switch)
+              keys = [(0,0.10),(8,0.14),(c1-0.5,0.14),(c1,0.42),(c1+2.6,0.42),(c1+3.2,0.14),
+                      (c2-0.5,0.14),(c2,0.42),(c2+2.6,0.42),(c2+3.2,0.14),
+                      (c3-1.6,0.14),(c3-1.1,0.02),(c3-0.05,0.02),(c3,0.5),(c3+2.8,0.5),
+                      (c4-0.5,0.2),(c4,0.55),(T,0.55)]
+              expr = f"{keys[-1][1]:.3f}"
+              for (t0,v0),(t1,v1) in reversed(list(zip(keys, keys[1:]))):
+                  seg_expr = f"({v0:.3f}+({v1:.3f}-{v0:.3f})*(t-{t0:.2f})/{max(t1-t0,0.01):.2f})"
+                  expr = f"if(lt(t,{t1:.2f}),{seg_expr},{expr})"
+              env = f"volume='{expr}':eval=frame"
               fc = (f"[1:a]aloop=loop=-1:size=2e9,atrim=0:{T:.2f},{env},afade=t=out:st={T-1.2:.2f}:d=1.2[m];"
                     f"[0:a][m]amix=inputs=2:duration=first:normalize=0[aout];"
                     f"[0:v]{fades}[vout]")
@@ -156,6 +158,15 @@ jobs:
                   "-c:a","copy","-movflags","+faststart","Courtney_AD90_FINAL.mp4"],check=True)
           subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size",
               "-of","default=noprint_wrappers=1","Courtney_AD90_FINAL.mp4"])
+          # measured audit
+          with open("EDIT_AUDIT.md","w") as f:
+              f.write("# Master edit - measured audit\n\n")
+              f.write(f"Total runtime: {T:.2f}s\n\nCard times (s): {', '.join(f'{t:.2f}' for t in card_ts)}\n\n")
+              f.write("| # | start | dur | type |\n|---|---|---|---|\n")
+              for k,(st,d) in enumerate(zip(starts,segd),1):
+                  typ = "CARD" if (abs(d-3.0)<0.15 or abs(d-4.2)<0.15) else "footage/talent"
+                  f.write(f"| {k} | {st:.2f} | {d:.2f} | {typ} |\n")
+
           PY
 
       - name: Upload artifact
@@ -173,7 +184,8 @@ jobs:
           git lfs install
           mkdir -p deliverables
           cp Courtney_AD90_FINAL.mp4 deliverables/
-          git add deliverables/Courtney_AD90_FINAL.mp4
+          cp EDIT_AUDIT.md production/EDIT_AUDIT.md || true
+          git add deliverables/Courtney_AD90_FINAL.mp4 production/EDIT_AUDIT.md
           git commit -m "ASSEMBLED: 90s FINAL: Atelier structure, single CTA, graded"
           for n in 1 2 3 4; do
             git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
