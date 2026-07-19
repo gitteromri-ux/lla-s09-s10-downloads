@@ -22,17 +22,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
-      - name: PUT file
+      - name: Fetch single file + PUT
         env:
-          PUT_URL: ${{ secrets.PUT_URL }}
           IN_URL: ${{ github.event.inputs.put_url }}
+          FPATH: ${{ github.event.inputs.path }}
         run: |
           set -e
-          URL="${PUT_URL:-$IN_URL}"
-          if [ -z "$URL" ]; then echo "No PUT_URL secret or input"; exit 1; fi
+          curl -sS -L --fail \
+            "https://media.githubusercontent.com/media/${{ github.repository }}/main/${FPATH}" -o payload.bin
+          file payload.bin; ls -la payload.bin
           curl -sS --fail -X PUT -H "Content-Type: ${{ github.event.inputs.content_type }}" \
-            --data-binary "@${{ github.event.inputs.path }}" "$URL" -w "HTTP %{http_code}\n"
+            --data-binary "@payload.bin" "$IN_URL" -w "HTTP %{http_code}\n"
           echo "UPLOAD DONE"
