@@ -1,0 +1,43 @@
+name: Fetch footage clips (named, to this branch)
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: "name=url pairs separated by | (e.g. capsules=https://...|oliveoil=https://...)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Download named clips
+        env:
+          MANIFEST: ${{ github.event.inputs.manifest }}
+        run: |
+          set -e
+          mkdir -p production/footage/clips
+          printf '%s\n' "$MANIFEST" | tr '|' '\n' | while read -r pair; do
+            [ -z "$pair" ] && continue
+            name="${pair%%=*}"; url="${pair#*=}"
+            curl -sL --max-time 180 "$url" -o "production/footage/clips/${name}.mp4"
+            ls -la "production/footage/clips/${name}.mp4"
+          done
+      - name: Commit (LFS)
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git add production/footage/clips
+          git commit -m "Footage clips: real generated b-roll (named)" || echo nothing
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
