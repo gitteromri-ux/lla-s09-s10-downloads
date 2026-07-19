@@ -59,33 +59,44 @@ jobs:
           W,H = 1920,1080
           MARGIN = float("${{ github.event.inputs.margin_scale }}")
 
-          def head_metrics(img, xlo=0, xhi=W, alpha_thr=60):
+          def person_mask(img, xlo=0, xhi=W, alpha_thr=60):
               cut = remove(img.convert("RGBA"), session=sess)
               a = np.asarray(cut)[...,3]
               m = a > alpha_thr
               mm = np.zeros_like(m); mm[:, xlo:xhi] = m[:, xlo:xhi]
+              return cut, mm
+
+          def head_of(mm):
               rows = np.where(mm.sum(1) > 12)[0]
               top = int(rows.min())
               band = mm[top+12:top+72]
               cols = np.where(band.sum(0) > 6)[0]
-              return top, int(cols.min()), int(cols.max()), cut, mm
+              return top, int(cols.max()-cols.min()), (int(cols.min())+int(cols.max()))//2
+
+          def shoulder_cx(mm, top, r0, r1):
+              band = mm[top+r0:top+r1]
+              ys, xs = np.nonzero(band)
+              return int(xs.mean())
 
           key = Image.open("assets/keyframe_final.png").convert("RGB").resize((W,H), Image.LANCZOS)
-          kt, kl, kr, _, _ = head_metrics(key, xlo=600, xhi=1400)
-          kw, kcx = kr-kl, (kl+kr)//2
+          _, kmask = person_mask(key, xlo=600, xhi=1400)
+          kt, kw, kcx = head_of(kmask)
 
           srcf = Image.open("work/src_frame.png").convert("RGB")
-          st, sl, sr, cut, smask = head_metrics(srcf)
-          sw_, scx = sr-sl, (sl+sr)//2
+          cut, smask = person_mask(srcf)
+          st, sw_, scx = head_of(smask)
 
           PS = MARGIN * kw / sw_
           sw, sh = int(W*PS), int(H*PS)
+          # align torso (shoulder centroid), not head axis
+          s_sh = shoulder_cx(smask, st, 150, 260)
+          k_sh = shoulder_cx(kmask, kt, int(150*PS), int(260*PS))
           paste_top = int(kt - PS*st - 8)
-          paste_left = int(kcx - PS*scx)
+          paste_left = int(k_sh - PS*s_sh)
           CX = paste_left + sw//2
           WY = paste_top + sh
-          print(f"MEASURE key: head_top={kt} w={kw} cx={kcx}")
-          print(f"MEASURE src: head_top={st} w={sw_} cx={scx}")
+          print(f"MEASURE key: head_top={kt} w={kw} cx={kcx} sh_cx={k_sh}")
+          print(f"MEASURE src: head_top={st} w={sw_} cx={scx} sh_cx={s_sh}")
           print(f"PARAMS PS={PS:.4f} CX={CX} WY={WY} paste_top={paste_top}")
 
           # color match talent to set light
@@ -97,17 +108,23 @@ jobs:
           gain = np.clip(gain, 0.90, 1.12)
           rgb = np.clip(rgb*gain, 0, 255)
 
-          # alpha cleanup + bottom/side fades
+          # alpha cleanup (no bottom fade - lap occluder handles the seam)
           a_img = Image.fromarray(a.astype(np.uint8)).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.6))
           a = np.asarray(a_img).astype(np.float32)
-          fade = np.ones((H,1), np.float32)
-          fade[-80:,0] = np.linspace(1,0,80)
-          a = a * fade
           cut2 = Image.fromarray(np.dstack([rgb, a[...,None]]).astype(np.uint8), "RGBA")
           cut_s = cut2.resize((sw, sh), Image.LANCZOS)
 
           canvas = key.convert("RGBA")
           canvas.paste(cut_s, (paste_left, paste_top), cut_s)
+
+          # lap occluder: the set's lap/legs strip drawn OVER her lower edge
+          LAP0 = max(870, WY - 60)
+          RAMP = 50
+          lap = key.crop((0, LAP0, W, H)).convert("RGBA")
+          la = np.full((H-LAP0, W), 255, np.float32)
+          la[:RAMP] = np.linspace(0,255,RAMP)[:,None]
+          lap.putalpha(Image.fromarray(la.astype(np.uint8)))
+          canvas.alpha_composite(lap, (0, LAP0))
           out = np.asarray(canvas.convert("RGB")).astype(np.float32)
           out = np.clip(out + np.random.normal(0, 2.2, out.shape), 0, 255).astype(np.uint8)
           import os; os.makedirs("deliverables", exist_ok=True)
