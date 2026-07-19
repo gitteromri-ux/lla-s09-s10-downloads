@@ -1,0 +1,38 @@
+name: PUT repo file to presigned URL
+
+on:
+  workflow_dispatch:
+    inputs:
+      path:
+        description: "Repo file path (LFS ok)"
+        required: true
+      content_type:
+        description: "Content-Type header"
+        required: true
+        default: "video/mp4"
+      put_url:
+        description: "Presigned PUT URL (short-lived)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  put:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: PUT file
+        env:
+          PUT_URL: ${{ secrets.PUT_URL }}
+          IN_URL: ${{ github.event.inputs.put_url }}
+        run: |
+          set -e
+          URL="${PUT_URL:-$IN_URL}"
+          if [ -z "$URL" ]; then echo "No PUT_URL secret or input"; exit 1; fi
+          curl -sS --fail -X PUT -H "Content-Type: ${{ github.event.inputs.content_type }}" \
+            --data-binary "@${{ github.event.inputs.path }}" "$URL" -w "HTTP %{http_code}\n"
+          echo "UPLOAD DONE"
