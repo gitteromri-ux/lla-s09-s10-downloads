@@ -54,6 +54,18 @@
   .sep{margin:0 20px;color:var(--teal)}
   .v-pad{padding:100px 54px}.h-pad{padding:70px 90px}
   .v-size .title{font-size:200px}.h-size .title{font-size:196px}
+  .neon{font-family:'Inter';font-weight:800;font-size:56px;letter-spacing:6px;color:#fff;
+        border:3px solid var(--teal);border-radius:999px;padding:30px 90px;
+        text-shadow:0 0 16px rgba(99,211,193,.9),0 0 42px rgba(0,110,255,.6);
+        box-shadow:0 0 30px rgba(99,211,193,.55), inset 0 0 22px rgba(99,211,193,.25);
+        opacity:0;animation:fadein .7s ease-out 1.1s forwards, glowpulse 1.6s ease-in-out 1.8s infinite alternate}
+  @keyframes glowpulse{from{box-shadow:0 0 26px rgba(99,211,193,.45), inset 0 0 18px rgba(99,211,193,.2)}
+                       to{box-shadow:0 0 52px rgba(99,211,193,.85), inset 0 0 30px rgba(99,211,193,.4)}}
+  .tp{margin-top:56px;display:flex;gap:22px;align-items:center;justify-content:center;
+      opacity:0;animation:fadein .8s ease-out 1.6s forwards}
+  .stars{font-size:54px;color:#00B67A;text-shadow:0 0 18px rgba(0,182,122,.9)}
+  .stars .half{opacity:.45}
+  .tptxt{font-family:'Inter';font-weight:600;font-size:36px;color:var(--bone);opacity:.9}
 </style>
 </head>
 <body>
@@ -84,6 +96,17 @@
   <img class="logoimg" src="../../assets/lla-logo-transparent@2x.png">
   <div class="tagline">It's Your Life. <em style="color:#7FB2E8">Live It Well.</em></div>
   <div class="foot"><b>18 live sessions</b> <span class="sep">·</span> 6 pillars <span class="sep">·</span> <b>$1,500 → $1,200</b></div>
+</div>
+
+
+<div class="card v-pad v-size" id="outro">
+  <img class="logoimg" src="../../assets/lla-logo-transparent@2x.png">
+  <div class="neon" style="margin-top:70px">ENROLL NOW</div>
+  <div class="tp">
+    <span class="stars">★★★★<span class="half">★</span></span>
+    <span class="tptxt">4.6 on Trustpilot</span>
+  </div>
+  <div class="foot"><b>18 live sessions</b> · 20% off launch week · $1,500 → $1,200</div>
 </div>
 
 <script>
