@@ -80,6 +80,8 @@ jobs:
           # top at the couch back line (y=585); no desk, no mosaic table
           SOFA = np.zeros((OH, OW), np.float32)
           SOFA[585:, 530:] = 255.0
+          # left pillow edge is diagonal; white desk peeks at upper-left of it
+          SOFA[585:690, 530:585] = 0.0
           _ramp_t = np.linspace(0, 255, 50)
           SOFA[585:635, 530:] = np.minimum(SOFA[585:635, 530:], _ramp_t[:, None])
           _ramp_l = np.linspace(0, 255, 50)

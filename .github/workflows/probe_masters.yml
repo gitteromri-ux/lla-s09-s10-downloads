@@ -1,0 +1,97 @@
+name: Probe repo masters for 0717 containment (no Google)
+
+# Checks whether the 7-min 0717 take is contained in the repo's own LFS
+# masters (fetchable from media.githubusercontent - no Drive involved).
+# Uses audio cross-correlation against deliverables/clips/seg_test.mp4
+# (= t=60-70s of the 0717 video) + frame matching.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg python3-pip
+          pip3 install --quiet numpy pillow
+
+      - name: Probe masters
+        run: |
+          set -e
+          mkdir -p probe deliverables/probe
+          curl -sL --fail "https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/main/deliverables/clips/seg_test.mp4" -o probe/seg_test.mp4
+          ffmpeg -y -i probe/seg_test.mp4 -ac 1 -ar 8000 -f f32le probe/ref.pcm 2>/dev/null
+          echo "== masters probe ==" > deliverables/probe/masters_report.txt
+          for M in Courtney_FRONT_PRO Courtney_FRONT_MASTER_v2 Courtney_FRONT_ULTRA Courtney_FRONT_ENHANCED_part1; do
+            echo "--- $M ---" | tee -a deliverables/probe/masters_report.txt
+            if ! curl -sL --fail "https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/main/${M}.mp4" -o probe/m.mp4; then
+              echo "$M: fetch FAILED" >> deliverables/probe/masters_report.txt; continue
+            fi
+            D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 probe/m.mp4 || echo 0)
+            echo "$M duration=$D" >> deliverables/probe/masters_report.txt
+            ffmpeg -y -i probe/m.mp4 -ac 1 -ar 8000 -f f32le probe/full.pcm 2>/dev/null || { echo "$M: no audio" >> deliverables/probe/masters_report.txt; continue; }
+            python3 - "$M" <<'PY'
+          import numpy as np, sys
+          M = sys.argv[1]
+          ref = np.fromfile("probe/ref.pcm", np.float32)
+          full = np.fromfile("probe/full.pcm", np.float32)
+          if len(full) < len(ref):
+              print("too short"); sys.exit(0)
+          ref = (ref - ref.mean()) / (ref.std() + 1e-9)
+          n = len(full) + len(ref)
+          F = np.fft.rfft(full, n); R = np.fft.rfft(ref[::-1], n)
+          xc = np.fft.irfft(F * R, n)
+          win = np.convolve(full**2, np.ones(len(ref)), "full")[:len(xc)]
+          nxc = xc / (np.sqrt(win * (ref**2).sum()) + 1e-6)
+          peak = int(np.argmax(nxc)); score = float(nxc[peak])
+          t0 = (peak - len(ref) + 1) / 8000.0
+          with open("deliverables/probe/masters_report.txt", "a") as f:
+              f.write(f"{M}: xcorr t0={t0:.2f}s score={score:.3f} (match if >0.5)\n")
+          open("probe/t0.txt","w").write(f"{t0} {score}")
+          PY
+            read T0 SC < probe/t0.txt
+            GOOD=$(python3 -c "print(1 if $SC > 0.5 else 0)")
+            if [ "$GOOD" = "1" ]; then
+              for dt in 2 6; do
+                TS=$(python3 -c "print($T0 + $dt)")
+                ffmpeg -y -ss "$TS" -i probe/m.mp4 -frames:v 1 -vf scale=1920:1080 "deliverables/probe/${M}_t${dt}.jpg" 2>/dev/null
+                ffmpeg -y -ss "$dt" -i probe/seg_test.mp4 -frames:v 1 "deliverables/probe/seg_t${dt}.jpg" 2>/dev/null
+              done
+              python3 - "$M" <<'PY'
+          import numpy as np, sys
+          from PIL import Image
+          M = sys.argv[1]
+          with open("deliverables/probe/masters_report.txt","a") as f:
+              for dt in (2,6):
+                  try:
+                      a = np.asarray(Image.open(f"deliverables/probe/{M}_t{dt}.jpg").convert("L").resize((480,270)), np.float32)
+                      b = np.asarray(Image.open(f"deliverables/probe/seg_t{dt}.jpg").convert("L").resize((480,270)), np.float32)
+                      f.write(f"{M} frame MAD at +{dt}s: {float(np.abs(a-b).mean()):.1f} (same take < 10)\n")
+                  except Exception as e:
+                      f.write(f"{M} frame diff error: {e}\n")
+          PY
+            fi
+            rm -f probe/m.mp4 probe/full.pcm
+          done
+          cat deliverables/probe/masters_report.txt
+
+      - name: Commit probe results
+        if: always()
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add deliverables/probe/
+          git commit -m "Probe: repo masters containment check for 0717" || echo "nothing to commit"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
