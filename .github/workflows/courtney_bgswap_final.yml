@@ -1,0 +1,253 @@
+name: Courtney BGSWAP FINAL (0717, background-only replace)
+
+# CLIENT-ORDERED SIMPLE APPROACH:
+#   Original 0717 video kept EXACTLY — same framing logic, same performance,
+#   same audio. Per-frame person matte; ONLY the static background is replaced
+#   with a close-up crop of the client's set (assets/plateA_final.png), and the
+#   whole original layer is scaled down slightly (constant zoom-out), anchored
+#   bottom-center. No embedding, no re-placement, no appearance changes.
+# 10 parallel runners -> assemble -> exact original monologue audio -> LFS.
+
+on:
+  workflow_dispatch:
+    inputs:
+      zoom:
+        description: "Foreground scale (zoom-out amount)"
+        required: true
+        default: "0.88"
+      bgx:
+        description: "Set-plate crop x0 (plate 2752x1536)"
+        required: true
+        default: "675"
+      bgy:
+        description: "Set-plate crop y0"
+        required: true
+        default: "528"
+      bgw:
+        description: "Set-plate crop width"
+        required: true
+        default: "1300"
+
+permissions:
+  contents: write
+
+env:
+  ZIP_URL: "https://drive.usercontent.google.com/download?id=1VyhOqzO5FuHcnSRKzDpA40AK_4hJkqSQ&export=download&confirm=t"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      matrix: ${{ steps.mk.outputs.matrix }}
+      total: ${{ steps.mk.outputs.total }}
+    steps:
+      - name: Probe source duration
+        id: mk
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip
+          curl -L --fail --retry 5 --retry-delay 5 "$ZIP_URL" -o 0717.zip
+          mkdir -p src && unzip -o 0717.zip -d src
+          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
+          D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$VID")
+          python3 - "$D" <<'PY'
+          import sys, json, os
+          D = float(sys.argv[1]); N = 10; FPS = 30
+          total = int(round(D*FPS))
+          chunks = []
+          for i in range(N):
+              ss = D*i/N
+              t = D/N if i < N-1 else D - ss
+              chunks.append({"i": i, "ss": round(ss,3), "t": round(t,3), "sf": int(round(ss*FPS))})
+          out = open(os.environ["GITHUB_OUTPUT"], "a")
+          print("matrix=" + json.dumps({"include": chunks}), file=out)
+          print("total=" + str(total), file=out)
+          PY
+
+  render:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: true
+      max-parallel: 10
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip python3-pip
+          pip3 install --quiet "rembg[cpu]" onnxruntime pillow numpy
+
+      - name: Get source + prep background
+        run: |
+          set -e
+          mkdir -p work out qc
+          curl -L --fail --retry 5 --retry-delay 5 "$ZIP_URL" -o 0717.zip
+          mkdir -p src && unzip -o 0717.zip -d src
+          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
+          echo "VIDEO=$VID" >> $GITHUB_ENV
+
+      - name: Matte + composite chunk ${{ matrix.i }}
+        run: |
+          set -e
+          cat > stream.py <<'PY'
+          import os, subprocess
+          import numpy as np
+          from rembg import remove, new_session
+          from PIL import Image, ImageFilter
+
+          OW, OH, FPS = 1920, 1080, 30
+          VIDEO = os.environ["VIDEO"]
+          SS = float(os.environ["CH_SS"]); T = float(os.environ["CH_T"])
+          SF = int(os.environ["CH_SF"]); TOTAL = int(os.environ["CH_TOTAL"])
+          ZOOM = float(os.environ["P_ZOOM"])
+          BGX = int(os.environ["P_BGX"]); BGY = int(os.environ["P_BGY"]); BGW = int(os.environ["P_BGW"])
+          BGH = BGW*9//16
+
+          plate = Image.open("assets/plateA_final.png").convert("RGB")
+          bg = plate.crop((BGX, BGY, BGX+BGW, BGY+BGH)).resize((OW,OH), Image.LANCZOS)
+          bg = bg.filter(ImageFilter.GaussianBlur(0.6)).convert("RGBA")
+          bg_np = np.asarray(bg.convert("RGB")).astype(np.float32)
+          set_mean = bg_np.reshape(-1,3).mean(0) + 1e-6
+
+          sw, sh = int(OW*ZOOM), int(OH*ZOOM)
+          px, py = (OW - sw)//2, OH - sh
+
+          sess = new_session("u2net_human_seg")
+          dec = subprocess.Popen(
+              ["ffmpeg","-ss",str(SS),"-t",str(T),"-i",VIDEO,
+               "-vf",f"scale={OW}:{OH}:flags=lanczos","-r",str(FPS),
+               "-f","rawvideo","-pix_fmt","rgb24","-"],
+              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+          enc = subprocess.Popen(
+              ["ffmpeg","-y","-f","rawvideo","-pix_fmt","rgb24","-s",f"{OW}x{OH}","-r",str(FPS),"-i","-",
+               "-c:v","libx264","-preset","medium","-crf","16","-pix_fmt","yuv420p",
+               "out/chunk.mp4"],
+              stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+          qc_at = {int(TOTAL*p) for p in (0.02,0.25,0.5,0.75,0.98)}
+          fsize = OW*OH*3
+          prev_alpha = None
+          i = 0
+          while True:
+              raw = dec.stdout.read(fsize)
+              if len(raw) < fsize: break
+              g = SF + i
+              frame = Image.frombytes("RGB",(OW,OH),raw).convert("RGBA")
+              cut = remove(frame, session=sess)
+              arr = np.asarray(cut).astype(np.float32)
+              rgb, alpha = arr[...,:3], arr[...,3]
+              m = alpha > 8
+              if m.any():
+                  fg_mean = rgb[m].mean(0) + 1e-6
+                  gain = np.clip(1.0 + (set_mean/fg_mean - 1.0)*0.5, 0.92, 1.10)
+                  rgb = np.clip(rgb*gain, 0, 255)
+              if prev_alpha is not None:
+                  alpha = 0.7*alpha + 0.3*prev_alpha
+              prev_alpha = alpha
+              alpha2 = alpha.copy()
+              alpha2[900:] = np.where(alpha2[900:] > 30, 255.0, alpha2[900:])
+              a_img = Image.fromarray(alpha2.astype(np.uint8),"L").filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.7))
+              cut = Image.fromarray(np.dstack([rgb, np.asarray(a_img)[...,None].astype(np.float32)]).astype(np.uint8),"RGBA")
+
+              cut_s = cut.resize((sw, sh), Image.LANCZOS)
+              layer = Image.new("RGBA",(OW,OH),(0,0,0,0))
+              layer.paste(cut_s, (px, py), cut_s)
+
+              sa = layer.split()[3].filter(ImageFilter.GaussianBlur(18)).point(lambda v: int(v*0.25))
+              shadow = Image.new("RGBA",(OW,OH),(0,0,0,0)); shadow.putalpha(sa)
+              comp = Image.alpha_composite(bg.copy(), shadow)
+              comp = Image.alpha_composite(comp, layer).convert("RGB")
+
+              ar = np.asarray(comp).astype(np.float32)
+              ar += np.random.normal(0, 2.0, ar.shape)
+              comp = Image.fromarray(np.clip(ar,0,255).astype(np.uint8))
+              if g in qc_at:
+                  comp.save(f"qc/qc_{g:06d}.png")
+              enc.stdin.write(comp.tobytes())
+              i += 1
+              if i % 300 == 0: print("chunk frames", i, flush=True)
+          enc.stdin.close(); enc.wait(); dec.wait()
+          print("CHUNK FRAMES", i, flush=True)
+          PY
+          python3 stream.py
+        env:
+          CH_SS: ${{ matrix.ss }}
+          CH_T: ${{ matrix.t }}
+          CH_SF: ${{ matrix.sf }}
+          CH_TOTAL: ${{ needs.setup.outputs.total }}
+          P_ZOOM: ${{ github.event.inputs.zoom }}
+          P_BGX: ${{ github.event.inputs.bgx }}
+          P_BGY: ${{ github.event.inputs.bgy }}
+          P_BGW: ${{ github.event.inputs.bgw }}
+
+      - name: Upload chunk
+        uses: actions/upload-artifact@v4
+        with:
+          name: chunk-${{ matrix.i }}
+          path: |
+            out/chunk.mp4
+            qc/*.png
+          if-no-files-found: error
+
+  assemble:
+    needs: [setup, render]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip
+
+      - name: Download chunks
+        uses: actions/download-artifact@v4
+        with:
+          path: chunks
+
+      - name: Concat + exact monologue audio
+        run: |
+          set -e
+          mkdir -p out deliverables/qc_bgswap
+          for i in $(seq 0 9); do
+            echo "file '$PWD/chunks/chunk-$i/out/chunk.mp4'" >> list.txt
+            cp chunks/chunk-$i/qc/*.png deliverables/qc_bgswap/ 2>/dev/null || true
+          done
+          cat list.txt
+          ffmpeg -y -f concat -safe 0 -i list.txt -c copy out/video_noaudio.mp4
+          curl -L --fail --retry 5 --retry-delay 5 "$ZIP_URL" -o 0717.zip
+          mkdir -p src && unzip -o 0717.zip -d src
+          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
+          ffmpeg -y -i "$VID" -vn -c:a aac -b:a 256k work_audio.m4a
+          ffmpeg -y -i out/video_noaudio.mp4 -i work_audio.m4a \
+            -c:v copy -c:a aac -b:a 256k -shortest out/Courtney_BGSWAP_0717.mp4
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 out/Courtney_BGSWAP_0717.mp4
+
+      - name: Upload final artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Courtney_BGSWAP_0717
+          path: |
+            out/Courtney_BGSWAP_0717.mp4
+            deliverables/qc_bgswap/*.png
+          if-no-files-found: error
+
+      - name: Commit deliverable + QC (LFS, this branch)
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp out/Courtney_BGSWAP_0717.mp4 deliverables/
+          git add .gitattributes deliverables/Courtney_BGSWAP_0717.mp4 deliverables/qc_bgswap/*.png
+          git commit -m "FINAL: background-only swap + slight zoom-out (0717)"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
