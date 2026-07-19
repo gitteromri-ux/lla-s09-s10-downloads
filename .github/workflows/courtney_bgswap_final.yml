@@ -62,9 +62,12 @@ jobs:
             echo "Using direct source URL"
             case "$SRC_URL" in
               *wetransfer.com*|*we.tl*)
-                pip3 install --quiet transferwee
-                python3 -m transferwee download "$SRC_URL" || transferwee download "$SRC_URL"
-                DL=$(ls -S | head -1); mv "$DL" source_dl
+                pip3 install --quiet requests
+                curl -sL --fail "https://raw.githubusercontent.com/iamleot/transferwee/master/transferwee.py" -o transferwee.py
+                python3 transferwee.py download "$SRC_URL"
+                DL=$(ls -t -S *.zip *.mp4 *.mov *.bin 2>/dev/null | head -1 || true)
+                [ -z "$DL" ] && DL=$(find . -maxdepth 1 -type f -newer transferwee.py ! -name 'transferwee.py' -size +10M | head -1)
+                echo "downloaded: $DL"; mv "$DL" source_dl
                 ;;
               *)
                 curl -L --fail --retry 5 --retry-delay 5 "$SRC_URL" -o source_dl
