@@ -37,21 +37,6 @@ jobs:
           curl -sL --fail -o Jost.ttf "https://github.com/google/fonts/raw/main/ofl/jost/Jost%5Bwght%5D.ttf"
           ls -la
 
-      - name: Swap in official logo if present
-        run: |
-          if [ -f assets/lla-logo-transparent@2x.png ]; then
-            python3 - <<'PY'
-          s = open('production/cards/cards.html').read()
-          logo = '<img src="../../assets/lla-logo-transparent@2x.png" style="width:520px">'
-          import re
-          s = re.sub(r'<div class="lockup">.*?</div>\s*</div>\s*</div>', lambda m: logo, s, flags=re.S)
-          open('production/cards/cards.html','w').write(s)
-          print("official logo swapped in")
-          PY
-          else
-            echo "official logo not in repo - using interim lockup"
-          fi
-
       - name: Screenshot every card
         run: |
           python3 - <<'PY'
