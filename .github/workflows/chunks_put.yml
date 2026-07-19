@@ -6,8 +6,8 @@ name: Cut + PUT source chunks (Seedance pipeline)
 on:
   workflow_dispatch:
     inputs:
-      plan_json:
-        description: "JSON array of {i, ss, t, url}"
+      plan_path:
+        description: "Repo path to JSON array of {i, ss, t, url}"
         required: true
       extract_audio:
         description: "Also extract+commit full audio (true/false)"
@@ -26,8 +26,6 @@ jobs:
         with:
           lfs: false
       - name: Cut and PUT
-        env:
-          PLAN: ${{ github.event.inputs.plan_json }}
         run: |
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip jq
@@ -37,7 +35,7 @@ jobs:
           unzip -o -q 0717.zip -d src
           VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' \) | head -1)
           ffprobe -v error -show_entries format=duration -of csv=p=0 "$VID"
-          echo "$PLAN" > plan.json
+          cp "${{ github.event.inputs.plan_path }}" plan.json
           jq -c '.[]' plan.json | while read -r row; do
             I=$(echo "$row" | jq -r .i); SS=$(echo "$row" | jq -r .ss); T=$(echo "$row" | jq -r .t); U=$(echo "$row" | jq -r .url)
             II=$(printf "%02d" "$I")
