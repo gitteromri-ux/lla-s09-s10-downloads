@@ -32,6 +32,9 @@ jobs:
           for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol; do
             curl -sL --fail "$M/production/footage/clips/$c.mp4" -o "work/$c.mp4"
           done
+          for c in cta1 cta2 cta3 outro; do
+            curl -sL --fail "$M/production/cards/anim/${c}_h.mp4" -o "work/anim_${c}_h.mp4"
+          done
           for u in "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Meditation%20Impromptu%2002.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Heart%20of%20Nowhere.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Almost%20in%20F.mp3"; do
             curl -sL --max-time 60 "$u" -o work/bed.mp3 || continue
             ffprobe -v error -show_entries format=duration -of csv=p=0 work/bed.mp3 >/dev/null 2>&1 && { echo "temp bed: $u"; break; } || rm -f work/bed.mp3
@@ -63,7 +66,7 @@ jobs:
 
           def cardseg(idx, png, dur):
               cid = png.split("/")[-1].replace("_h.png","").replace(".png","")
-              anim = f"production/cards/anim/{cid}_h.mp4"
+              anim = f"work/anim_{cid}_h.mp4"
               if os.path.exists(anim):
                   subprocess.run([FF,"-y","-t",str(dur),"-i",anim,
                     "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
