@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* LLA brand system — from LLA_Editing_Brief_S09_S10.md */
+  :root{
+    --navy:#0E1F48; --deep:#081634; --blue:#006EFF; --bone:#F5F2EA; --ink:#161A18;
+    /* sub-accents pending logo-exact hexes (interim tokens) */
+    --violet:#6E56CF; --green:#3DBB7D;
+    --grad:linear-gradient(180deg,#0E1F48 0%,#081634 100%);
+  }
+  @font-face{font-family:'Fraunces';src:url('fonts/Fraunces.ttf');}
+  @font-face{font-family:'Inter';src:url('fonts/Inter.ttf');}
+  @font-face{font-family:'InterSemi';src:url('fonts/Inter-SemiBold.ttf');}
+  @font-face{font-family:'Jost';src:url('fonts/Jost.ttf');} /* interim Codec Pro stand-in */
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#333;font-family:'Inter'}
+
+  .card{position:relative;overflow:hidden;background:var(--grad);color:var(--bone);
+        display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .v{width:1080px;height:1920px}
+  .h{width:1920px;height:1080px}
+
+  .fr{font-family:'Fraunces';font-weight:600;letter-spacing:.5px}
+  .fr-i{font-family:'Fraunces';font-style:italic;font-weight:500}
+  .in{font-family:'Inter'}
+  .ins{font-family:'InterSemi'}
+
+  /* lockup (interim recreation — swap for assets/lla-logo-transparent@2x.png when provided) */
+  .lockup{display:flex;flex-direction:column;align-items:center;gap:18px}
+  .dna{width:120px;height:120px;position:relative}
+  .dna .o{position:absolute;border:6px solid var(--blue);border-radius:50%;inset:0}
+  .dna .o2{position:absolute;border:6px solid var(--violet);border-radius:50%;inset:14px;transform:rotate(45deg);border-style:dashed}
+  .dna .dot{position:absolute;width:22px;height:22px;border-radius:50%;background:var(--green);top:8px;left:49px}
+  .wordmark{font-family:'Jost';font-weight:600;font-size:52px;letter-spacing:8px;color:var(--bone)}
+  .byline{font-family:'Inter';font-size:26px;letter-spacing:2px;color:var(--bone);opacity:.75}
+
+  .kicker{font-family:'InterSemi';font-size:34px;letter-spacing:6px;text-transform:uppercase;color:var(--blue);margin-bottom:42px}
+  .big{font-size:140px;line-height:1.08}
+  .mid{font-size:96px;line-height:1.12}
+  .sub{font-family:'Inter';font-size:40px;opacity:.8;margin-top:44px;line-height:1.4}
+  .chip{margin-top:70px;background:var(--blue);color:#fff;font-family:'InterSemi';
+        font-size:44px;padding:28px 76px;border-radius:999px}
+  .chip.green{background:var(--green)}
+  .chip.violet{background:var(--violet)}
+  .foot{position:absolute;bottom:70px;left:0;right:0;font-family:'Inter';font-size:28px;opacity:.6}
+  .strike{text-decoration:line-through;text-decoration-thickness:8px;opacity:.85}
+  .accentbar{width:160px;height:10px;background:var(--blue);border-radius:6px;margin:56px auto 0}
+  .pillars{display:flex;gap:26px;margin-top:60px;flex-wrap:wrap;justify-content:center}
+  .pill{border:3px solid rgba(245,242,234,.35);border-radius:18px;padding:22px 40px;font-family:'InterSemi';font-size:40px}
+  .v .big{font-size:150px}
+  .h .big{font-size:160px}
+  .h .kicker{margin-bottom:30px}
+</style>
+</head>
+<body>
+
+<!-- ============ CTA CARD 1 · placement ~25% ============ -->
+<div class="card v" id="cta1_v">
+  <div class="kicker">Longevity Life Academy</div>
+  <div class="fr big">Your body keeps<br>score. Learn to<br>read it.</div>
+  <div class="accentbar"></div>
+  <div class="sub">Live curriculum · real biomarkers · real habits</div>
+  <div class="chip">Join the Academy</div>
+</div>
+<div class="card h" id="cta1_h">
+  <div class="kicker">Longevity Life Academy</div>
+  <div class="fr big">Your body keeps score.<br>Learn to read it.</div>
+  <div class="accentbar"></div>
+  <div class="chip">Join the Academy</div>
+</div>
+
+<!-- ============ CTA CARD 2 · placement ~55% ============ -->
+<div class="card v" id="cta2_v">
+  <div class="kicker">The Method</div>
+  <div class="fr big">Consistency.<br>Data.<br>Six pillars.</div>
+  <div class="accentbar" style="background:var(--green)"></div>
+  <div class="sub">Eat · Sleep · Move · Supplement · Heart · Data</div>
+  <div class="chip green">Start this week</div>
+</div>
+<div class="card h" id="cta2_h">
+  <div class="kicker">The Method</div>
+  <div class="fr big">Consistency. Data. Six pillars.</div>
+  <div class="pillars">
+    <div class="pill">Eat</div><div class="pill">Sleep</div><div class="pill">Move</div>
+    <div class="pill">Supplement</div><div class="pill">Heart</div><div class="pill">Data</div>
+  </div>
+  <div class="chip green">Start this week</div>
+</div>
+
+<!-- ============ CTA CARD 3 · offer · placement ~85% ============ -->
+<div class="card v" id="cta3_v">
+  <div class="kicker">Launch Week</div>
+  <div class="fr mid"><span class="strike">$1,500</span></div>
+  <div class="fr big" style="color:var(--bone)">$1,200</div>
+  <div class="accentbar" style="background:var(--violet)"></div>
+  <div class="sub">18 live sessions · 20% off · this week</div>
+  <div class="chip violet">Enroll now</div>
+</div>
+<div class="card h" id="cta3_h">
+  <div class="kicker">Launch Week</div>
+  <div class="fr big"><span class="strike">$1,500</span> &nbsp;→&nbsp; $1,200</div>
+  <div class="accentbar" style="background:var(--violet)"></div>
+  <div class="sub">18 live sessions · 20% off · this week</div>
+  <div class="chip violet">Enroll now</div>
+</div>
+
+<!-- ============ END CARD ============ -->
+<div class="card v" id="end_v">
+  <div class="lockup">
+    <div class="dna"><div class="o"></div><div class="o2"></div><div class="dot"></div></div>
+    <div class="wordmark">LONGEVITY LIFE ACADEMY</div>
+    <div class="byline">by eTeacher Group</div>
+  </div>
+  <div class="fr-i" style="font-size:56px;margin-top:90px">It's Your Life. Live It Well.</div>
+  <div class="foot ins" style="font-size:40px;opacity:.95">18 LIVE sessions · 6 Pillars · 20% off launch week · $1,500 → $1,200</div>
+</div>
+<div class="card h" id="end_h">
+  <div class="lockup">
+    <div class="dna"><div class="o"></div><div class="o2"></div><div class="dot"></div></div>
+    <div class="wordmark">LONGEVITY LIFE ACADEMY</div>
+    <div class="byline">by eTeacher Group</div>
+  </div>
+  <div class="fr-i" style="font-size:56px;margin-top:70px">It's Your Life. Live It Well.</div>
+  <div class="foot ins" style="font-size:38px;opacity:.95">18 LIVE sessions · 6 Pillars · 20% off launch week · $1,500 → $1,200</div>
+</div>
+
+<!-- ============ NAME CHYRON (Courtney) ============ -->
+<div class="card v" id="chyron_v" style="justify-content:flex-end;padding-bottom:340px;align-items:flex-start;padding-left:90px;text-align:left">
+  <div class="fr" style="font-size:72px">COURTNEY</div>
+  <div class="in" style="font-size:36px;opacity:.7;margin-top:12px">Longevity Life Academy</div>
+</div>
+<div class="card h" id="chyron_h" style="justify-content:flex-end;padding-bottom:160px;align-items:flex-start;padding-left:120px;text-align:left">
+  <div class="fr" style="font-size:72px">COURTNEY</div>
+  <div class="in" style="font-size:36px;opacity:.7;margin-top:12px">Longevity Life Academy</div>
+</div>
+
+</body>
+</html>

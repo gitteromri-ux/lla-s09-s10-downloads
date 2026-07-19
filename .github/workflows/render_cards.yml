@@ -1,0 +1,86 @@
+name: Render brand cards (Meta vertical + horizontal PNGs)
+
+# Renders production/cards/cards.html to pixel-exact PNGs:
+#   1080x1920 (Meta vertical) and 1920x1080 (horizontal).
+# Real Fraunces + Inter from Google Fonts. If assets/lla-logo-transparent@2x.png
+# exists in the repo, it replaces the interim CSS lockup automatically.
+# Output committed to production/cards/png/ on this branch.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install Playwright
+        run: |
+          pip3 install --quiet playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Fetch fonts
+        run: |
+          set -e
+          mkdir -p production/cards/fonts
+          cd production/cards/fonts
+          curl -sL --fail -o Fraunces.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
+          curl -sL --fail -o Inter.ttf "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
+          cp Inter.ttf Inter-SemiBold.ttf
+          curl -sL --fail -o Jost.ttf "https://github.com/google/fonts/raw/main/ofl/jost/Jost%5Bwght%5D.ttf"
+          ls -la
+
+      - name: Swap in official logo if present
+        run: |
+          if [ -f assets/lla-logo-transparent@2x.png ]; then
+            python3 - <<'PY'
+          s = open('production/cards/cards.html').read()
+          logo = '<img src="../../assets/lla-logo-transparent@2x.png" style="width:520px">'
+          import re
+          s = re.sub(r'<div class="lockup">.*?</div>\s*</div>\s*</div>', lambda m: logo, s, flags=re.S)
+          open('production/cards/cards.html','w').write(s)
+          print("official logo swapped in")
+          PY
+          else
+            echo "official logo not in repo - using interim lockup"
+          fi
+
+      - name: Screenshot every card
+        run: |
+          python3 - <<'PY'
+          from playwright.sync_api import sync_playwright
+          import os, pathlib
+          out_v = "production/cards/png/vertical"; out_h = "production/cards/png/horizontal"
+          os.makedirs(out_v, exist_ok=True); os.makedirs(out_h, exist_ok=True)
+          url = "file://" + str(pathlib.Path("production/cards/cards.html").resolve())
+          with sync_playwright() as p:
+              b = p.chromium.launch()
+              pg = b.new_page(viewport={"width":2000,"height":2100})
+              pg.goto(url); pg.wait_for_timeout(1500)
+              for el in pg.query_selector_all(".card"):
+                  cid = el.get_attribute("id")
+                  folder = out_v if cid.endswith("_v") else out_h
+                  el.screenshot(path=f"{folder}/{cid}.png")
+                  print("rendered", cid)
+              b.close()
+          PY
+          ls -la production/cards/png/vertical production/cards/png/horizontal
+
+      - name: Commit rendered cards
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add production/cards/
+          git checkout -- production/cards/cards.html 2>/dev/null || true
+          git add production/cards/png production/cards/fonts
+          git commit -m "Brand cards: rendered PNGs (vertical + horizontal)" || echo "nothing to commit"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
