@@ -47,9 +47,14 @@ jobs:
         run: |
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip
-          curl -L --fail --retry 5 --retry-delay 5 "$ZIP_URL" -o 0717.zip
-          mkdir -p src && unzip -o 0717.zip -d src
+          for n in 1 2 3 4 5 6 7 8; do
+            curl -L --fail --retry 3 --retry-delay 5 "$ZIP_URL" -o 0717.zip || true
+            if unzip -t 0717.zip >/dev/null 2>&1; then break; fi
+            echo "Drive served junk (attempt $n), retrying..."; sleep $((n*15))
+          done
+          mkdir -p src srcvid && unzip -o 0717.zip -d src
           VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
+          cp "$VID" "srcvid/source$(echo "$VID" | grep -oE '\.[a-zA-Z0-9]+$')"
           D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$VID")
           python3 - "$D" <<'PY'
           import sys, json, os
@@ -64,6 +69,13 @@ jobs:
           print("matrix=" + json.dumps({"include": chunks}), file=out)
           print("total=" + str(total), file=out)
           PY
+      - name: Share source video with render jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-0717
+          path: srcvid/
+          compression-level: 0
+          if-no-files-found: error
 
   render:
     needs: setup
@@ -82,14 +94,19 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip python3-pip
           pip3 install --quiet "rembg[cpu]" onnxruntime pillow numpy
 
-      - name: Get source + prep background
+      - name: Get source from setup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: source-0717
+          path: srcvid
+
+      - name: Locate source
         run: |
           set -e
           mkdir -p work out qc
-          curl -L --fail --retry 5 --retry-delay 5 "$ZIP_URL" -o 0717.zip
-          mkdir -p src && unzip -o 0717.zip -d src
-          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
+          VID=$(find srcvid -type f | head -1)
           echo "VIDEO=$VID" >> $GITHUB_ENV
+          ffprobe -v error -show_entries format=duration -of csv=p=0 "$VID"
 
       - name: Matte + composite chunk ${{ matrix.i }}
         run: |
@@ -221,9 +238,7 @@ jobs:
           done
           cat list.txt
           ffmpeg -y -f concat -safe 0 -i list.txt -c copy out/video_noaudio.mp4
-          curl -L --fail --retry 5 --retry-delay 5 "$ZIP_URL" -o 0717.zip
-          mkdir -p src && unzip -o 0717.zip -d src
-          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' \) | head -1)
+          VID=$(find chunks/source-0717 -type f | head -1)
           ffmpeg -y -i "$VID" -vn -c:a aac -b:a 256k work_audio.m4a
           ffmpeg -y -i out/video_noaudio.mp4 -i work_audio.m4a \
             -c:v copy -c:a aac -b:a 256k -shortest out/Courtney_BGSWAP_0717.mp4
