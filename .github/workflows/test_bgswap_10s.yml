@@ -18,7 +18,7 @@ on:
       bgy:
         description: "Set-plate crop y0"
         required: false
-        default: "470"
+        default: "530"
       bgw:
         description: "Set-plate crop width"
         required: false
@@ -78,6 +78,7 @@ jobs:
           # feathered; right side fades out before the scaled-layer edge cut
           SOFA = np.zeros((OH, OW), np.float32)
           SOFA[585:, 520:] = 255.0
+          SOFA[770:, 260:] = 255.0   # left couch arm (mosaic table at x<260 stays out)
           _ramp_t = np.linspace(0, 255, 50)
           SOFA[585:635, 520:] = np.minimum(SOFA[585:635, 520:], _ramp_t[:, None])
           _ramp_l = np.linspace(0, 255, 60)
@@ -105,8 +106,10 @@ jobs:
               if len(raw) < fsize: break
               frame = Image.frombytes("RGB",(OW,OH),raw).convert("RGBA")
               cut = remove(frame, session=sess)
-              arr = np.asarray(cut).astype(np.float32)
-              rgb, alpha = arr[...,:3], arr[...,3]
+              # RGB must come from the ORIGINAL frame: rembg zeroes RGB outside
+              # the person mask, which blacked out the sofa region on union
+              rgb = np.asarray(frame.convert("RGB")).astype(np.float32)
+              alpha = np.asarray(cut).astype(np.float32)[...,3]
               # union with her REAL SOFA (static mask - camera and sofa are static):
               # she keeps sitting on her own couch, transplanted into the set
               alpha = np.maximum(alpha, SOFA)
