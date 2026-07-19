@@ -1,0 +1,54 @@
+name: Clip segment from 0717
+
+# Cuts a segment of the source video and commits it (small, importable).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ss:
+        description: "Start time (seconds)"
+        required: true
+        default: "60"
+      t:
+        description: "Duration (seconds)"
+        required: true
+        default: "10"
+      name:
+        description: "Output name (no extension)"
+        required: true
+        default: "seg_test"
+
+permissions:
+  contents: write
+
+jobs:
+  clip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Cut segment
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip
+          curl -L --fail --retry 5 --retry-delay 5 \
+            "https://drive.usercontent.google.com/download?id=1VyhOqzO5FuHcnSRKzDpA40AK_4hJkqSQ&export=download&confirm=t" -o 0717.zip
+          mkdir -p src deliverables/clips
+          unzip -o -q 0717.zip -d src
+          VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' \) | head -1)
+          ffmpeg -y -ss "${{ github.event.inputs.ss }}" -t "${{ github.event.inputs.t }}" -i "$VID" \
+            -vf scale=1920:1080:flags=lanczos -r 30 -c:v libx264 -preset medium -crf 18 -c:a aac -b:a 192k \
+            "deliverables/clips/${{ github.event.inputs.name }}.mp4"
+          ls -la deliverables/clips
+      - name: Commit
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add deliverables/clips
+          git commit -m "Clip: ${{ github.event.inputs.name }} (${{ github.event.inputs.ss }}s +${{ github.event.inputs.t }}s)"
+          for n in 1 2 3 4; do
+            git pull --rebase origin main && git push origin HEAD:main && break || sleep $((2**n))
+          done
