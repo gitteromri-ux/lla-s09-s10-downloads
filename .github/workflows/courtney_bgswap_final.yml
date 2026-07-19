@@ -149,17 +149,18 @@ jobs:
 
           # static sofa mask (orig 1920x1080 coords): couch + pillows region,
           # feathered; right side fades out before the scaled-layer edge cut
+          # mask hugs the couch: left edge just inside the left pillow (x=530),
+          # top at the couch back line (y=585); no desk, no mosaic table
           SOFA = np.zeros((OH, OW), np.float32)
-          SOFA[585:, 520:] = 255.0
-          SOFA[770:, 260:] = 255.0   # left couch arm (mosaic table at x<260 stays out)
+          SOFA[585:, 530:] = 255.0
           _ramp_t = np.linspace(0, 255, 50)
-          SOFA[585:635, 520:] = np.minimum(SOFA[585:635, 520:], _ramp_t[:, None])
-          _ramp_l = np.linspace(0, 255, 60)
-          SOFA[585:, 520:580] = np.minimum(SOFA[585:, 520:580], _ramp_l[None, :])
+          SOFA[585:635, 530:] = np.minimum(SOFA[585:635, 530:], _ramp_t[:, None])
+          _ramp_l = np.linspace(0, 255, 50)
+          SOFA[585:, 530:580] = np.minimum(SOFA[585:, 530:580], _ramp_l[None, :])
           _ramp_r = np.linspace(255, 0, 60)
           SOFA[585:, 1860:] = np.minimum(SOFA[585:, 1860:], _ramp_r[None, :])
           from PIL import Image as _I
-          SOFA = np.asarray(_I.fromarray(SOFA.astype(np.uint8)).filter(ImageFilter.GaussianBlur(6))).astype(np.float32)
+          SOFA = np.asarray(_I.fromarray(SOFA.astype(np.uint8)).filter(ImageFilter.GaussianBlur(4))).astype(np.float32)
           dec = subprocess.Popen(
               ["ffmpeg","-ss",str(SS),"-t",str(T),"-i",VIDEO,
                "-vf",f"scale={OW}:{OH}:flags=lanczos","-r",str(FPS),
