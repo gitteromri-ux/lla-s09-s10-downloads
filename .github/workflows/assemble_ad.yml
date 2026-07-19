@@ -1,0 +1,132 @@
+name: ASSEMBLE 90s ad draft (auto edit v1)
+
+# Machine-assembles the Courtney 90s ad from the hub plan:
+# razors her blocks (audio continuous), cuts b-roll over the visuals at the
+# planned phrases, inserts CTA cards at 23/54/77/end, Atelier silence mix.
+# Output: deliverables/Courtney_AD90_DRAFT1.mp4 (LFS, this branch).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Get materials
+        run: |
+          set -e
+          mkdir -p work
+          M="https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}"
+          curl -sL --fail "$M/deliverables/Courtney_BGSWAP_0717.mp4" -o work/base.mp4
+          for c in capsules_macro oximeter_data site_supplements site_yoga site_ctabg site_nutrition site_sleep site_coldplunge site_wearables data_curve site_protocol swimmer_dawn; do
+            curl -sL --fail "$M/production/footage/clips/$c.mp4" -o "work/$c.mp4"
+          done
+          ls -la work
+
+      - name: Build edit
+        run: |
+          set -e
+          python3 - <<'PY'
+          import subprocess, os
+          FF = "ffmpeg"
+          W,H,FPS = 1920,1080,30
+          os.makedirs("seg", exist_ok=True)
+
+          def her(idx, ss, dur):
+              # her video+audio segment from base
+              subprocess.run([FF,"-y","-ss",str(ss),"-t",str(dur),"-i","work/base.mp4",
+                "-vf",f"scale={W}:{H},fps={FPS}","-c:v","libx264","-crf","17","-preset","fast",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:02d}.mp4"],check=True)
+
+          def broll(idx, clip, dur, a_ss, a_dur_off):
+              # b-roll visual + HER AUDIO underneath (audio from base at a_ss+a_dur_off)
+              subprocess.run([FF,"-y","-stream_loop","-1","-t",str(dur),"-i",f"work/{clip}.mp4",
+                "-ss",str(a_ss+a_dur_off),"-t",str(dur),"-i","work/base.mp4",
+                "-map","0:v","-map","1:a","-vf",f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS}",
+                "-c:v","libx264","-crf","17","-preset","fast","-c:a","aac","-ar","48000","-ac","2",
+                f"seg/{idx:02d}.mp4"],check=True)
+
+          def cardseg(idx, png, dur):
+              subprocess.run([FF,"-y","-loop","1","-t",str(dur),"-i",png,
+                "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
+                "-vf",f"scale={W}:{H},fps={FPS}","-c:v","libx264","-crf","17","-preset","fast",
+                "-c:a","aac","-shortest",f"seg/{idx:02d}.mp4"],check=True)
+
+          i=0
+          def nx():
+              global i; i+=1; return i
+
+          # ACT I - hook 37.4-53.8 (16.4s): her 4s, then broll with her audio
+          her(nx(), 37.4, 4.0)
+          broll(nx(), "capsules_macro", 4.5, 37.4, 4.0)
+          broll(nx(), "oximeter_data", 3.5, 37.4, 8.5)
+          broll(nx(), "site_supplements", 4.4, 37.4, 12.0)
+          # ACT II - turn 53.8-67.16 (13.36s): yoga first, then her
+          broll(nx(), "site_yoga", 4.0, 53.8, 0.0)
+          her(nx(), 57.8, 9.36)
+          cardseg(nx(), "production/cards/png/horizontal/cta1_h.png", 2.5)
+          # ACT III - pillars 127.34-146.88 (19.54s)
+          her(nx(), 127.34, 8.0)
+          broll(nx(), "site_nutrition", 2.3, 127.34, 8.0)
+          broll(nx(), "site_sleep", 2.3, 127.34, 10.3)
+          broll(nx(), "site_yoga", 2.3, 127.34, 12.6)
+          broll(nx(), "site_supplements", 2.3, 127.34, 14.9)
+          broll(nx(), "site_coldplunge", 2.34, 127.34, 17.2)
+          # 18 lessons 154.36-161.8 (7.44s)
+          broll(nx(), "site_wearables", 3.7, 154.36, 0.0)
+          her(nx(), 158.06, 3.74)
+          cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 2.5)
+          # ACT IV - proof 170.4-183.28 (12.88s)
+          her(nx(), 170.4, 4.0)
+          broll(nx(), "data_curve", 5.0, 170.4, 4.0)
+          her(nx(), 179.4, 3.88)
+          # ACT V - offer 204.92-212.96 (8.04s)
+          broll(nx(), "site_protocol", 4.0, 204.92, 0.0)
+          her(nx(), 208.92, 4.04)
+          cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 2.5)
+          # ACT VI - close take 4: 378.48-402.32 (23.84s)
+          her(nx(), 378.48, 23.84)
+          cardseg(nx(), "production/cards/png/horizontal/end_h.png", 3.0)
+
+          with open("list.txt","w") as f:
+              for k in range(1, i+1):
+                  f.write(f"file 'seg/{k:02d}.mp4'\n")
+          subprocess.run([FF,"-y","-f","concat","-safe","0","-i","list.txt",
+              "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
+              "-c:a","aac","-b:a","256k","-movflags","+faststart",
+              "Courtney_AD90_DRAFT1.mp4"],check=True)
+          subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size",
+              "-of","default=noprint_wrappers=1","Courtney_AD90_DRAFT1.mp4"])
+          PY
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Courtney_AD90_DRAFT1
+          path: Courtney_AD90_DRAFT1.mp4
+          if-no-files-found: error
+
+      - name: Commit (LFS)
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          mkdir -p deliverables
+          cp Courtney_AD90_DRAFT1.mp4 deliverables/
+          git add deliverables/Courtney_AD90_DRAFT1.mp4
+          git commit -m "ASSEMBLED: 90s ad draft v1 (auto edit)"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
