@@ -1,0 +1,91 @@
+name: Insert Atelier cards into final film
+
+# Overlays the four animated Atelier cards (cta1/cta2/cta3 at camera cuts,
+# audio continuous; end card over the fade-out tail) onto the published film.
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_name:
+        description: "Deliverable basename (no extension)"
+        required: false
+        default: "Courtney_CINEMA_FINAL_0717"
+      t1:
+        description: "cta1 start (s)"
+        required: false
+        default: "90"
+      t2:
+        description: "cta2 start (s)"
+        required: false
+        default: "210"
+      t3:
+        description: "cta3 start (s)"
+        required: false
+        default: "330"
+      tend:
+        description: "end card start (s, over fade tail)"
+        required: false
+        default: "401.5"
+
+permissions:
+  contents: write
+
+jobs:
+  cards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Insert cards
+        env:
+          OUT: ${{ github.event.inputs.video_name }}
+          T1: ${{ github.event.inputs.t1 }}
+          T2: ${{ github.event.inputs.t2 }}
+          T3: ${{ github.event.inputs.t3 }}
+          TE: ${{ github.event.inputs.tend }}
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          M="https://media.githubusercontent.com/media/${{ github.repository }}"
+          curl -sS -L --fail --retry 4 "$M/main/deliverables/${OUT}.mp4" -o in.mp4
+          for c in cta1 cta2 cta3 end; do
+            curl -sS -L --fail --retry 4 \
+              "$M/claude/video-0717-background-replace-qm11te/production/cards/anim/${c}_h.mp4" -o "${c}.mp4"
+          done
+          # pad end card so it holds through the audio tail
+          ffmpeg -y -loglevel error -i end.mp4 -vf "tpad=stop_mode=clone:stop_duration=6,fps=30" \
+            -c:v libx264 -crf 17 -preset fast -pix_fmt yuv420p -an end_pad.mp4
+          ffmpeg -y -loglevel error -i in.mp4 \
+            -itsoffset "$T1" -i cta1.mp4 \
+            -itsoffset "$T2" -i cta2.mp4 \
+            -itsoffset "$T3" -i cta3.mp4 \
+            -itsoffset "$TE" -i end_pad.mp4 \
+            -filter_complex "[0:v][1:v]overlay=eof_action=pass[v1];[v1][2:v]overlay=eof_action=pass[v2];[v2][3:v]overlay=eof_action=pass[v3];[v3][4:v]overlay=eof_action=pass[vout]" \
+            -map "[vout]" -map 0:a -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p \
+            -c:a copy -movflags +faststart "out_${OUT}.mp4"
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "out_${OUT}.mp4"
+          # QC stills at each card + one control frame
+          mkdir -p deliverables/qc_cinema
+          for p in $T1 $T2 $T3 402 405 60; do
+            ffmpeg -y -loglevel error -ss "$p" -i "out_${OUT}.mp4" -frames:v 1 "deliverables/qc_cinema/card_${p}.jpg" || true
+          done
+      - name: Commit back to page
+        env:
+          OUT: ${{ github.event.inputs.video_name }}
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp "out_${OUT}.mp4" "deliverables/${OUT}.mp4"
+          git add .gitattributes "deliverables/${OUT}.mp4" deliverables/qc_cinema
+          git commit -m "CINEMA FINAL: Atelier cards inserted (cta1/2/3 + end bookend)"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.video_name }}_cards
+          path: out_*.mp4
+          if-no-files-found: error
