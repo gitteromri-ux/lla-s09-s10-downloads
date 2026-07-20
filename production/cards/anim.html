@@ -95,7 +95,9 @@ const LINES = {
 };
 const p = new URLSearchParams(location.search);
 const id = p.get('card') || 'cta1';
-document.getElementById(id).classList.add('on');
+const cardEl = document.getElementById(id);
+cardEl.classList.add('on');
+cardEl.classList.add(p.get('o') === 'h' ? 'h-size' : 'v-size');
 for (const [kid, words] of Object.entries(LINES)) {
   const el = document.getElementById(kid);
   if (!el) continue;
