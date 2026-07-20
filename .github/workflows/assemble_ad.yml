@@ -29,7 +29,7 @@ jobs:
           mkdir -p work
           M="https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}"
           curl -sL --fail "$M/deliverables/Courtney_BGSWAP_0717.mp4" -o work/base.mp4
-          for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol; do
+          for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol site_mental site_wearables food_flatlay swimmer_dawn; do
             curl -sL --fail "$M/production/footage/clips/$c.mp4" -o "work/$c.mp4"
           done
           for c in cta1 cta2 cta3 outro; do
