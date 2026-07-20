@@ -2,6 +2,11 @@ name: Fetch OTRO videos from Drive
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/design-video-file-access-0y4n0e
+    paths:
+      - '.github/workflows/fetch_otro.yml'
 
 permissions:
   contents: write
