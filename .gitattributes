@@ -1,1 +1,2 @@
 *.mp4 filter=lfs diff=lfs merge=lfs -text
+deliverables/ADD-1_TEACHERS.mp4 -filter -diff -merge -text
