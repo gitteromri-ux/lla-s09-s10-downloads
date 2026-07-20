@@ -1,0 +1,79 @@
+name: Animate cards (Atelier-style entrance, mp4)
+
+# Records each card's CSS entrance animation (staggered type rise, rule draw,
+# slow push) as 1080p/vertical mp4s. Output: production/cards/anim/*.mp4 (LFS).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  animate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install Playwright + ffmpeg
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip3 install --quiet playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Fetch fonts
+        run: |
+          set -e
+          mkdir -p production/cards/fonts
+          cd production/cards/fonts
+          [ -f Fraunces.ttf ] || curl -sL --fail -o Fraunces.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
+          [ -f Inter.ttf ] || curl -sL --fail -o Inter.ttf "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
+
+      - name: Record animations
+        run: |
+          python3 - <<'PY'
+          from playwright.sync_api import sync_playwright
+          import os, pathlib, subprocess, glob, shutil
+          base = "file://" + str(pathlib.Path("production/cards/anim.html").resolve())
+          os.makedirs("production/cards/anim", exist_ok=True)
+          jobs = []
+          for cid in ("cta1","cta2","cta3","end"):
+              jobs.append((cid, "h", 1920, 1080))
+              jobs.append((cid, "v", 1080, 1920))
+          with sync_playwright() as p:
+              b = p.chromium.launch()
+              for cid, o, w, h in jobs:
+                  vdir = f"rec_{cid}_{o}"
+                  ctx = b.new_context(viewport={"width":w,"height":h},
+                                      record_video_dir=vdir,
+                                      record_video_size={"width":w,"height":h})
+                  pg = ctx.new_page()
+                  pg.goto(f"{base}?card={cid}&o={o}")
+                  pg.wait_for_timeout(3600)
+                  ctx.close()
+                  webm = glob.glob(f"{vdir}/*.webm")[0]
+                  out = f"production/cards/anim/{cid}_{o}.mp4"
+                  subprocess.run(["ffmpeg","-y","-i",webm,
+                      "-vf",f"scale={w}:{h},fps=30","-ss","0.3","-t","3.0",
+                      "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
+                      "-an",out],check=True)
+                  shutil.rmtree(vdir)
+                  print("animated", out)
+              b.close()
+          PY
+          ls -la production/cards/anim
+
+      - name: Commit (LFS)
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git add production/cards
+          git commit -m "Animated cards: Atelier-style entrance mp4s (both orientations)"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done

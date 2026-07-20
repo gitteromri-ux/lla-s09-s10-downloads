@@ -1,0 +1,38 @@
+name: Fetch official brand assets from site
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Download logos + key imagery
+        run: |
+          set -e
+          UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0"
+          S="https://www.longevitylifeacademy.com/assets"
+          mkdir -p assets analysis/site
+          curl -sL -A "$UA" "$S/lla-logo-exact-transparent@2x.png" -o "assets/lla-logo-exact-transparent@2x.png"
+          cp "assets/lla-logo-exact-transparent@2x.png" "assets/lla-logo-transparent@2x.png"
+          curl -sL -A "$UA" "$S/lla-wordmark-only-transparent@2x.png" -o "assets/lla-wordmark-only-transparent@2x.png"
+          curl -sL -A "$UA" "$S/hero-cgm.jpg" -o "analysis/site/hero-cgm.jpg"
+          curl -sL -A "$UA" "$S/instructors/courtney.jpg" -o "analysis/site/instructor-courtney.jpg"
+          curl -sL -A "$UA" "$S/instructors/julie-gibson-clark.jpg" -o "analysis/site/instructor-julie.jpg"
+          file assets/*.png analysis/site/*.jpg
+      - name: Commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add assets analysis/site
+          git commit -m "Official brand assets: logos + site imagery" || echo nothing
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
