@@ -58,7 +58,7 @@ jobs:
           ACTS=[
             dict(name="hook",   s=39.60, e=70.60,
                  heads=[(44.90,"LONGEVITY ADVICE IS EVERYWHERE."),
-                        (58.74,"THE DIRECT PATH TO LONGEVITY")],
+                        (58.74,"YOUR DIRECT PATH TO LONGEVITY")],
                  broll=[("noise_screens",44.90,5.60),("site_yoga",53.90,3.40)]),
             dict(name="why",    s=73.90, e=101.60,
                  heads=[(74.02,"WHY LONGEVITY NEVER STUCK FOR YOU")], broll=[]),
@@ -68,13 +68,13 @@ jobs:
                         ("swimmer_dawn",140.80,1.80),("site_supplements",142.60,1.90),
                         ("site_wearables",144.50,1.70)]),
             dict(name="proof",  s=165.40,e=189.80,
-                 heads=[(171.00,"+14 YEARS OF LIFE · HARVARD-BACKED")],
+                 heads=[(171.00,"+14 YEARS LIFE TRAJECTORY")],
                  broll=[("data_curve",171.20,5.00)]),
             dict(name="academy",s=195.80,e=221.00,
-                 heads=[(195.94,"LONGEVITY LIFE ACADEMY · 18 LIVE SESSIONS")],
+                 heads=[(195.94,"LONGEVITY LIFE ACADEMY · 18 LIVE SESSION COURSE")],
                  broll=[("site_protocol",213.40,4.60)]),
             dict(name="close",  s=377.50,e=401.90,
-                 heads=[(377.60,"YOUR LONGEVITY CLASS IS IN SESSION")], broll=[]),
+                 heads=[(377.60,"YOUR LONGEVITY BLUEPRINT")], broll=[]),
           ]
           CARDS_AFTER={"pillars":"cta1","proof":"cta2","academy":"cta3"}
           gaps=[]
