@@ -1,0 +1,64 @@
+name: Atelier final (pace + grade + cards + music)
+
+# One deterministic rebuild of the cinema film from the 28 raw Seedance chunks:
+# WIDE<->TIGHT Atelier rhythm, per-chunk grade normalization, navy brand cards
+# (static PNGs, correct fonts), music bed from t=0, exact 15/8/9 chunk windows.
+
+on:
+  workflow_dispatch:
+    inputs:
+      out_name:
+        description: "Output basename"
+        required: false
+        default: "Courtney_CINEMA_FINAL_0717"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Build film
+        env:
+          OUT: ${{ github.event.inputs.out_name }}
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg jq git-lfs
+          pip3 install --quiet pillow
+          # music bed lives on main
+          test -f assets/music_bed_0717.mp3 || curl -sS -L --fail --retry 4 \
+            "https://raw.githubusercontent.com/${{ github.repository }}/main/assets/music_bed_0717.mp3" \
+            -o assets/music_bed_0717.mp3
+          python3 .pipeline/atelier_build.py
+      - name: Publish to page
+        env:
+          OUT: ${{ github.event.inputs.out_name }}
+        run: |
+          set -e
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git lfs install
+          # publish from a clean main worktree so branch history never conflicts
+          git fetch origin main
+          git worktree add pub origin/main
+          cd pub
+          git lfs track "*.mp4" || true
+          mkdir -p deliverables/qc_cinema
+          cp "../out/${OUT}.mp4" "deliverables/${OUT}.mp4"
+          cp ../deliverables/qc_cinema/at_*.jpg deliverables/qc_cinema/
+          git add .gitattributes "deliverables/${OUT}.mp4" deliverables/qc_cinema
+          git commit -m "CINEMA FINAL: Atelier cut (pace + grade match + navy cards + music from 0:00)"
+          for n in 1 2 3 4 5 6; do
+            git pull --rebase origin main && git push origin HEAD:main && break || sleep $((2**n))
+          done
+          git log origin/main --oneline -1 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.out_name }}_atelier
+          path: out/*.mp4
+          if-no-files-found: error
