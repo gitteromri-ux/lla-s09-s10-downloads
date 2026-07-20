@@ -1,0 +1,16 @@
+name: Separate FA music from French voice (Demucs)
+
+# Registration copy on main — dispatched runs use the file at the dispatched ref
+# (claude/video-0717-background-replace-qm11te), which holds the live version.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  separate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Registration stub — dispatch on the feature branch ref."
