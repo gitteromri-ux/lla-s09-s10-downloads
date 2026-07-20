@@ -35,6 +35,7 @@ jobs:
           for c in cta1 cta2 cta3 outro; do
             curl -sL --fail "$M/production/cards/anim/${c}_h.mp4" -o "work/anim_${c}_h.mp4"
           done
+          curl -sL --fail "$M/production/music/fa_sting.m4a" -o work/fa_sting.m4a || true
           for u in "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Meditation%20Impromptu%2002.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Heart%20of%20Nowhere.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Almost%20in%20F.mp3"; do
             curl -sL --max-time 60 "$u" -o work/bed.mp3 || continue
             ffprobe -v error -show_entries format=duration -of csv=p=0 work/bed.mp3 >/dev/null 2>&1 && { echo "temp bed: $u"; break; } || rm -f work/bed.mp3
@@ -180,10 +181,24 @@ jobs:
                   seg_expr = f"({v0:.3f}+({v1:.3f}-{v0:.3f})*(t-{t0:.2f})/{max(t1-t0,0.01):.2f})"
                   expr = f"if(lt(t,{t1:.2f}),{seg_expr},{expr})"
               env = f"volume='{expr}':eval=frame"
-              fc = (f"[1:a]aloop=loop=-1:size=2e9,atrim=0:{T:.2f},{env},afade=t=out:st={T-1.2:.2f}:d=1.2[m];"
-                    f"[0:a][m]amix=inputs=2:duration=first:normalize=0[aout];"
-                    f"[0:v]{fades}[vout]")
-              subprocess.run([FF,"-y","-i","cut.mp4","-i","work/bed.mp3",
+              sting = _os.path.exists("work/fa_sting.m4a")
+              if sting:
+                  d1,d2,d3 = int(c1*1000),int(c2*1000),int(c3*1000)
+                  fc = (f"[1:a]aloop=loop=-1:size=2e9,atrim=0:{T:.2f},{env},afade=t=out:st={T-1.2:.2f}:d=1.2[m];"
+                        f"[2:a]asplit=3[s1][s2][s3];"
+                        f"[s1]adelay={d1}|{d1},volume=0.5[st1];"
+                        f"[s2]adelay={d2}|{d2},volume=0.5[st2];"
+                        f"[s3]adelay={d3}|{d3},volume=0.6[st3];"
+                        f"[m][st1][st2][st3]amix=inputs=4:duration=first:normalize=0[mm];"
+                        f"[0:a][mm]amix=inputs=2:duration=first:normalize=0[aout];"
+                        f"[0:v]{fades}[vout]")
+                  inputs = [FF,"-y","-i","cut.mp4","-i","work/bed.mp3","-i","work/fa_sting.m4a"]
+              else:
+                  fc = (f"[1:a]aloop=loop=-1:size=2e9,atrim=0:{T:.2f},{env},afade=t=out:st={T-1.2:.2f}:d=1.2[m];"
+                        f"[0:a][m]amix=inputs=2:duration=first:normalize=0[aout];"
+                        f"[0:v]{fades}[vout]")
+                  inputs = [FF,"-y","-i","cut.mp4","-i","work/bed.mp3"]
+              subprocess.run(inputs + [
                   "-filter_complex",fc,"-map","[vout]","-map","[aout]",
                   "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
                   "-c:a","aac","-b:a","256k","-movflags","+faststart",
