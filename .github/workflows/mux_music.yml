@@ -1,0 +1,67 @@
+name: Mux music bed under final film
+
+# Loops the music bed at low volume UNDER the existing monologue audio of the
+# published film. Voice track untouched on top; video stream copied as-is.
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_name:
+        description: "Deliverable basename (no extension)"
+        required: false
+        default: "Courtney_CINEMA_FINAL_0717"
+      music_path:
+        description: "Repo path to music file"
+        required: false
+        default: "assets/music_bed_0717.mp3"
+      music_vol:
+        description: "Music volume (0-1, under voice)"
+        required: false
+        default: "0.15"
+
+permissions:
+  contents: write
+
+jobs:
+  mux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Mix music under voice
+        env:
+          OUT: ${{ github.event.inputs.video_name }}
+          MUS: ${{ github.event.inputs.music_path }}
+          VOL: ${{ github.event.inputs.music_vol }}
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          curl -sS -L --fail --retry 4 --retry-delay 3 \
+            "https://media.githubusercontent.com/media/${{ github.repository }}/main/deliverables/${OUT}.mp4" -o in.mp4
+          DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 in.mp4)
+          FADEOUT=$(awk "BEGIN{print $DUR-4}")
+          echo "film=$DUR music_vol=$VOL fadeout_at=$FADEOUT"
+          ffmpeg -y -loglevel error -i in.mp4 -stream_loop -1 -i "$MUS" \
+            -filter_complex "[1:a]volume=${VOL},afade=t=in:st=0:d=2,afade=t=out:st=${FADEOUT}:d=4[mus];[0:a][mus]amix=inputs=2:duration=first:normalize=0[aout]" \
+            -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 256k "out_${OUT}.mp4"
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "out_${OUT}.mp4"
+      - name: Commit back to page
+        env:
+          OUT: ${{ github.event.inputs.video_name }}
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp "out_${OUT}.mp4" "deliverables/${OUT}.mp4"
+          git add .gitattributes "deliverables/${OUT}.mp4"
+          git commit -m "CINEMA FINAL: music bed under monologue (${OUT})"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.video_name }}_music
+          path: out_*.mp4
+          if-no-files-found: error
