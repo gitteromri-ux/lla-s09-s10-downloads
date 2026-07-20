@@ -1,0 +1,183 @@
+name: FA recut (pace, captions, real cards, music from 0)
+
+# Rebuilds the film French-Atelier style from the clean assembly artifact:
+# WIDE<->TIGHT punch-in alternation (~3.8s beats), burned captions that swap
+# on cuts (Inter, white, shadow), the DESIGNED navy/Fraunces cards with fade
+# entrances, bright grade-matched b-roll only, music present from frame one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_name:
+        description: "Deliverable basename"
+        required: false
+        default: "Courtney_CINEMA_FINAL_0717"
+      clean_run_id:
+        description: "Run id of clean assembly artifact"
+        required: false
+        default: "29731883948"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  recut:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ github.event.inputs.video_name }}
+          run-id: ${{ github.event.inputs.clean_run_id }}
+          github-token: ${{ github.token }}
+          path: art
+      - name: Setup
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs fonts-inter
+          pip3 install --quiet faster-whisper
+          ls -la art
+          cp "art/${{ github.event.inputs.video_name }}.mp4" base.mp4
+          ffprobe -v error -show_entries format=duration -of csv=p=0 base.mp4
+          A="https://media.githubusercontent.com/media/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
+          R="https://raw.githubusercontent.com/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
+          for c in cta1 cta2 cta3 end; do
+            curl -sS -L --fail --retry 4 "$R/cards/png/horizontal/${c}_h.png" -o "${c}.png" \
+              || curl -sS -L --fail --retry 4 "$A/cards/png/horizontal/${c}_h.png" -o "${c}.png"
+          done
+          i=0
+          for c in capsules_macro site_yoga data_curve swimmer_dawn; do
+            curl -sS -L --fail --retry 4 "$A/footage/clips/$c.mp4" -o "raw_$i.mp4"
+            ffmpeg -y -loglevel error -stream_loop -1 -t 2.2 -i "raw_$i.mp4" \
+              -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=30,eq=brightness=0.05:saturation=1.12,colorbalance=rm=.04:bm=-.04" \
+              -c:v libx264 -crf 17 -preset fast -pix_fmt yuv420p -an "b_$i.mp4"
+            i=$((i+1))
+          done
+      - name: Captions (whisper) + recut plan
+        run: |
+          set -e
+          ffmpeg -y -loglevel error -i base.mp4 -vn -ac 1 -ar 16000 a.wav
+          python3 - <<'PY'
+          from faster_whisper import WhisperModel
+          m = WhisperModel("base", compute_type="int8")
+          segs, _ = m.transcribe("a.wav", word_timestamps=True)
+          words = []
+          for s in segs:
+              for w in (s.words or []):
+                  words.append((w.start, w.end, w.word.strip()))
+          # group 4-7 words per caption
+          lines, cur, t0 = [], [], None
+          for st, en, tx in words:
+              if t0 is None: t0 = st
+              cur.append(tx)
+              if len(cur) >= 6 or (tx and tx[-1] in ".!?,;" and len(cur) >= 4):
+                  lines.append((t0, en, " ".join(cur))); cur, t0 = [], None
+          if cur: lines.append((t0, words[-1][1], " ".join(cur)))
+          def ts(t):
+              h=int(t//3600); mnt=int(t%3600//60); s=t%60
+              return f"{h}:{mnt:02d}:{s:05.2f}"
+          hdr = """[Script Info]
+          PlayResX: 1920
+          PlayResY: 1080
+          WrapStyle: 0
+
+          [V4+ Styles]
+          Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+          Style: Cap,Inter,52,&H00FFFFFF,&H00FFFFFF,&H00000000,&H99000000,-1,0,0,0,100,100,0,0,1,0,2,2,60,60,378,1
+
+          [Events]
+          Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+          """
+          import textwrap
+          out = textwrap.dedent(hdr)
+          for st, en, tx in lines:
+              en = max(en, st + 0.6)
+              out += f"Dialogue: 0,{ts(st)},{ts(en)},Cap,,0,0,0,,{tx}\n"
+          open("caps.ass","w").write(out)
+          print("captions:", len(lines))
+          # punch-in alternation plan
+          import subprocess
+          d = float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration",
+                "-of","csv=p=0","base.mp4"],capture_output=True,text=True).stdout)
+          BEAT = 3.8
+          k, t, parts = 0, 0.0, []
+          while t < d:
+              t1 = min(t + BEAT, d)
+              src = k % 2  # 0=wide 1=punch
+              parts.append(f"[{src}:v]trim=start={t:.3f}:end={t1:.3f},setpts=PTS-STARTPTS[s{k}];")
+              k += 1; t = t1
+          chain = "".join(parts) + "".join(f"[s{j}]" for j in range(k)) + f"concat=n={k}:v=1:a=0[vcat];"
+          chain += "[vcat]subtitles=caps.ass:fontsdir=/usr/share/fonts[vout]"
+          open("recut.txt","w").write(chain)
+          print("beats:", k, "dur:", d)
+          PY
+      - name: Encode recut + overlays + music
+        env:
+          OUT: ${{ github.event.inputs.video_name }}
+        run: |
+          set -e
+          # tight variant (32% punch-in, biased to face)
+          ffmpeg -y -loglevel error -i base.mp4 \
+            -vf "crop=1454:818:(iw-1454)/2:(ih-818)*0.30,scale=1920:1080:flags=lanczos" \
+            -c:v libx264 -crf 17 -preset fast -pix_fmt yuv420p -an punch.mp4
+          ffmpeg -y -loglevel error -i base.mp4 -i punch.mp4 \
+            -filter_complex_script recut.txt -map "[vout]" -an \
+            -c:v libx264 -crf 17 -preset fast -pix_fmt yuv420p recut.mp4
+          VD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 base.mp4)
+          MFO=$(awk "BEGIN{print $VD-5}")
+          ffmpeg -y -loglevel error -i recut.mp4 -i base.mp4 \
+            -stream_loop -1 -i assets/music_bed_0717.mp3 \
+            -loop 1 -t 2.4 -i end.png \
+            -loop 1 -t 2.6 -i cta1.png \
+            -loop 1 -t 2.6 -i cta2.png \
+            -loop 1 -t 2.6 -i cta3.png \
+            -loop 1 -t 6 -i end.png \
+            -itsoffset 45  -i b_0.mp4 \
+            -itsoffset 150 -i b_1.mp4 \
+            -itsoffset 300 -i b_2.mp4 \
+            -itsoffset 375 -i b_3.mp4 \
+            -filter_complex "\
+            [3:v]format=rgba,scale=1920:1080,fade=t=out:st=2.05:d=0.35:alpha=1[open];\
+            [4:v]format=rgba,scale=1920:1080,fade=t=in:st=0:d=0.3:alpha=1,fade=t=out:st=2.3:d=0.3:alpha=1,setpts=PTS+90/TB[c1];\
+            [5:v]format=rgba,scale=1920:1080,fade=t=in:st=0:d=0.3:alpha=1,fade=t=out:st=2.3:d=0.3:alpha=1,setpts=PTS+210/TB[c2];\
+            [6:v]format=rgba,scale=1920:1080,fade=t=in:st=0:d=0.3:alpha=1,fade=t=out:st=2.3:d=0.3:alpha=1,setpts=PTS+330/TB[c3];\
+            [7:v]format=rgba,scale=1920:1080,fade=t=in:st=0:d=0.4:alpha=1,setpts=PTS+400.5/TB[ce];\
+            [0:v][open]overlay=eof_action=pass[v1];\
+            [v1][8:v]overlay=eof_action=pass[v2];\
+            [v2][9:v]overlay=eof_action=pass[v3];\
+            [v3][10:v]overlay=eof_action=pass[v4];\
+            [v4][c1]overlay=eof_action=pass[v5];\
+            [v5][c2]overlay=eof_action=pass[v6];\
+            [v6][c3]overlay=eof_action=pass[v7];\
+            [v7][ce]overlay=eof_action=pass[vout];\
+            [2:a]volume=0.18,afade=t=out:st=${MFO}:d=5[mus];\
+            [1:a][mus]amix=inputs=2:duration=first:normalize=0[aout]" \
+            -map "[vout]" -map "[aout]" -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p \
+            -c:a aac -b:a 256k -movflags +faststart "out_${OUT}.mp4"
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "out_${OUT}.mp4"
+          mkdir -p deliverables/qc_cinema
+          for p in 1 5 9 46 91 151 211 301 331 376 403; do
+            ffmpeg -y -loglevel error -ss "$p" -i "out_${OUT}.mp4" -frames:v 1 "deliverables/qc_cinema/fa_${p}.jpg" || true
+          done
+      - name: Publish
+        env:
+          OUT: ${{ github.event.inputs.video_name }}
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp "out_${OUT}.mp4" "deliverables/${OUT}.mp4"
+          git add .gitattributes "deliverables/${OUT}.mp4" deliverables/qc_cinema
+          git commit -m "CINEMA FINAL: FA recut (pace, captions, designed cards, music from 0)"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.video_name }}_FA
+          path: out_*.mp4
+          if-no-files-found: error
