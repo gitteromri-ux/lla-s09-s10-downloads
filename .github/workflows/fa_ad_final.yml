@@ -1,0 +1,183 @@
+name: FA FINAL (final takes only, ~110s)
+
+# Cuts the film to the marked FINAL TAKES per the take map, FA structure:
+# WIDE<->TIGHT beats, b-roll over her voice, designed cards, captions on cuts,
+# music from frame one, brand end card. Output: Courtney_FA_FINAL.mp4
+
+on:
+  workflow_dispatch:
+    inputs:
+      clean_run_id:
+        description: "Run id of clean assembly artifact"
+        required: false
+        default: "29731883948"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  fafinal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: Courtney_CINEMA_FINAL_0717
+          run-id: ${{ github.event.inputs.clean_run_id }}
+          github-token: ${{ github.token }}
+          path: art
+      - name: Setup
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs fonts-inter
+          pip3 install --quiet faster-whisper
+          cp art/Courtney_CINEMA_FINAL_0717.mp4 base.mp4
+          A="https://media.githubusercontent.com/media/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
+          R="https://raw.githubusercontent.com/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
+          for c in cta1 cta2 cta3 end; do
+            curl -sS -L --fail --retry 4 "$R/cards/png/horizontal/${c}_h.png" -o "${c}.png" \
+              || curl -sS -L --fail --retry 4 "$A/cards/png/horizontal/${c}_h.png" -o "${c}.png"
+          done
+          for c in capsules_macro data_curve site_supplements site_yoga site_nutrition site_sleep site_coldplunge site_wearables site_protocol; do
+            curl -sS -L --fail --retry 4 "$A/footage/clips/$c.mp4" -o "$c.mp4"
+          done
+      - name: Build FA cut
+        run: |
+          set -e
+          python3 - <<'PY'
+          import subprocess, os
+          FF="ffmpeg"; W,H,FPS=1920,1080,30
+          os.makedirs("seg", exist_ok=True)
+          i=0
+          def nx():
+              global i; i+=1; return i
+          TIGHT="crop=1454:818:(iw-1454)/2:(ih-818)*0.30,scale=1920:1080:flags=lanczos,"
+          def her(ss, dur, tight=False):
+              vf=(TIGHT if tight else "")+f"scale={W}:{H},fps={FPS}"
+              subprocess.run([FF,"-y","-loglevel","error","-ss",str(ss),"-t",str(dur),"-i","base.mp4",
+                "-vf",vf,"-af","afade=t=in:d=0.02,afade=t=out:st="+str(max(0,dur-0.02))+":d=0.02",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{nx():02d}.mp4"],check=True)
+          def broll(clip, dur, a_ss):
+              subprocess.run([FF,"-y","-loglevel","error","-stream_loop","-1","-t",str(dur),"-i",f"{clip}.mp4",
+                "-ss",str(a_ss),"-t",str(dur),"-i","base.mp4",
+                "-map","0:v","-map","1:a",
+                "-vf",f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},eq=brightness=0.05:saturation=1.1",
+                "-af","afade=t=in:d=0.02,afade=t=out:st="+str(max(0,dur-0.02))+":d=0.02",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{nx():02d}.mp4"],check=True)
+          def card(png, dur):
+              subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i",png,
+                "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
+                "-vf",f"scale={W}:{H},fps={FPS},fade=t=in:d=0.3,fade=t=out:st={dur-0.3}:d=0.3",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-shortest",f"seg/{nx():02d}.mp4"],check=True)
+          # ACT I hook (final take 37.4-53.8)
+          her(37.4,2.0); her(39.4,2.0,True)
+          broll("capsules_macro",4.5,41.4)
+          broll("data_curve",3.5,45.9)
+          broll("site_supplements",4.4,49.4)
+          # ACT II turn
+          broll("site_yoga",4.0,53.8)
+          her(57.8,3.1); her(60.9,3.0,True); her(63.9,3.26)
+          card("cta1.png",2.5)
+          # ACT III pillars (127.34-146.88)
+          her(127.34,2.66,True); her(130.0,2.7); her(132.7,2.64,True)
+          broll("site_nutrition",2.3,135.34)
+          broll("site_sleep",2.3,137.64)
+          broll("site_yoga",2.3,139.94)
+          broll("site_supplements",2.3,142.24)
+          broll("site_coldplunge",2.34,144.54)
+          broll("site_wearables",3.7,154.36)
+          her(158.06,3.74)
+          card("cta2.png",2.5)
+          # ACT IV proof
+          her(170.4,4.0,True)
+          broll("data_curve",5.0,174.4)
+          her(179.4,3.88)
+          # ACT V offer
+          broll("site_protocol",4.0,204.92)
+          her(208.92,4.04,True)
+          card("cta3.png",2.5)
+          # ACT VI close (final take 4: 378.48-402.32)
+          her(378.48,3.02); her(381.5,3.0,True); her(384.5,3.0); her(387.5,3.0,True)
+          her(390.5,3.5); her(394.0,4.0,True); her(398.0,4.32)
+          card("end.png",3.5)
+          with open("list.txt","w") as f:
+              for k in range(1,i+1): f.write(f"file 'seg/{k:02d}.mp4'\n")
+          subprocess.run([FF,"-y","-loglevel","error","-f","concat","-safe","0","-i","list.txt",
+              "-c","copy","cut_raw.mp4"],check=True)
+          subprocess.run(["ffprobe","-v","error","-show_entries","format=duration",
+              "-of","default=noprint_wrappers=1","cut_raw.mp4"])
+          PY
+      - name: Captions + music + publish encode
+        run: |
+          set -e
+          ffmpeg -y -loglevel error -i cut_raw.mp4 -vn -ac 1 -ar 16000 a.wav
+          python3 - <<'PY'
+          from faster_whisper import WhisperModel
+          m = WhisperModel("base", compute_type="int8")
+          segs,_ = m.transcribe("a.wav", word_timestamps=True)
+          words=[(w.start,w.end,w.word.strip()) for s in segs for w in (s.words or [])]
+          lines,cur,t0=[],[],None
+          for st,en,tx in words:
+              if t0 is None: t0=st
+              cur.append(tx)
+              if len(cur)>=6 or (tx and tx[-1] in ".!?,;" and len(cur)>=4):
+                  lines.append((t0,en," ".join(cur))); cur,t0=[],None
+          if cur: lines.append((t0,words[-1][1]," ".join(cur)))
+          def ts(t):
+              return f"{int(t//3600)}:{int(t%3600//60):02d}:{t%60:05.2f}"
+          out=("[Script Info]\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\n"
+            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+            "Style: Cap,Inter,52,&H00FFFFFF,&H00FFFFFF,&H00000000,&H99000000,-1,0,0,0,100,100,0,0,1,0,2,2,60,60,378,1\n\n"
+            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+          for st,en,tx in lines:
+              out+=f"Dialogue: 0,{ts(st)},{ts(max(en,st+0.6))},Cap,,0,0,0,,{tx}\n"
+          open("caps.ass","w").write(out)
+          print("captions:",len(lines))
+          PY
+          D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 cut_raw.mp4)
+          MFO=$(awk "BEGIN{print $D-4}")
+          ffmpeg -y -loglevel error -i cut_raw.mp4 -stream_loop -1 -i assets/music_bed_0717.mp3 \
+            -filter_complex "[0:v]subtitles=caps.ass:fontsdir=/usr/share/fonts[vout];[1:a]volume=0.18,afade=t=out:st=${MFO}:d=4[mus];[0:a][mus]amix=inputs=2:duration=first:normalize=0[aout]" \
+            -map "[vout]" -map "[aout]" -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p \
+            -c:a aac -b:a 256k -movflags +faststart Courtney_FA_FINAL.mp4
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 Courtney_FA_FINAL.mp4
+          mkdir -p deliverables/qc_cinema
+          for p in 1 6 16 26 34 45 55 65 80 95 108; do
+            ffmpeg -y -loglevel error -ss "$p" -i Courtney_FA_FINAL.mp4 -frames:v 1 "deliverables/qc_cinema/ad_${p}.jpg" || true
+          done
+      - name: Publish
+        run: |
+          set -e
+          python3 - <<'PY'
+          html=open('index.html').read()
+          if 'Courtney_FA_FINAL' not in html:
+              url="https://media.githubusercontent.com/media/gitteromri-ux/lla-s09-s10-downloads/main/deliverables/Courtney_FA_FINAL.mp4"
+              sec=('\n<h2>&#11088; FA FINAL &middot; Final Takes Cut</h2>\n'
+                   '<p class="sec-note">French Atelier cut &middot; final takes only &middot; cards &middot; captions &middot; music</p>\n'
+                   '<div class="grid">\n<div class="card"><h3>Courtney &middot; FA Final</h3><div class="meta">FINAL CUT &middot; 1080p</div>\n'
+                   f'<video src="{url}" autoplay muted loop playsinline controls preload="metadata"></video>\n'
+                   f'<div class="btn-row"><a class="btn" href="{url}" download>&#11015; Download</a></div></div>\n</div>\n')
+              i=html.find('class="lede"'); j=html.find('</p>',i)+4
+              open('index.html','w').write(html[:j]+sec+html[j:])
+              print("page card added")
+          PY
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp Courtney_FA_FINAL.mp4 deliverables/
+          git add .gitattributes index.html deliverables/Courtney_FA_FINAL.mp4 deliverables/qc_cinema
+          git commit -m "FA FINAL: final-takes cut (cards, captions, music)"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Courtney_FA_FINAL
+          path: Courtney_FA_FINAL.mp4
+          if-no-files-found: error
