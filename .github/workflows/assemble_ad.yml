@@ -243,57 +243,81 @@ jobs:
                   typ = "CARD" if k in CARD_IDX else "footage/talent"
                   f.write(f"| {k} | {st:.2f} | {d:.2f} | {typ} |\n")
 
-          # ===== SECOND DELIVERABLE: true FA-length cut (~55s) =====
-          # Complete-thought blocks only, cuts land on sentence boundaries:
-          # hook -> breath/turn -> card1 -> pillar singles run -> Harvard line
-          # -> offer card -> "I'm Courtney. This is LLA." -> outro
-          FA = [1,2,3,4,5,6,7,9, 17,18,19,20,21,22,23, 29, 37, 40, 41]
-          with open("fa_list.txt","w") as f:
-              for k in FA:
-                  f.write(f"file 'seg/{k:02d}.mp4'\n")
-          subprocess.run([FF,"-y","-f","concat","-safe","0","-i","fa_list.txt",
-              "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
-              "-c:a","aac","-b:a","256k","fa_cut.mp4"],check=True)
-          FT = dur("fa_cut.mp4")
-          fdur = [dur(f"seg/{k:02d}.mp4") for k in FA]
-          fstarts = []; facc = 0.0
-          for d in fdur: fstarts.append(facc); facc += d
-          fcards = [fstarts[j] for j,k in enumerate(FA) if k in CARD_IDX]
-          f1,f3,f4 = (fcards + [20,44,50])[:3]
-          print("FA cut:", FT, "cards:", fcards)
-          if _os.path.exists(BED):
-              fk = [(0,0.38),(f1-0.5,0.44),(f1,0.6),(f1+2.4,0.6),(f1+3.0,0.3),
-                    (f3-1.2,0.3),(f3-0.7,0.04),(f3-0.05,0.04),(f3,0.64),(f3+2.4,0.64),
-                    (f4-0.5,0.4),(f4,0.64),(FT,0.64)]
+          # ===== SHORT CUTS: generic mixer (concat chosen segs, FA music grammar) =====
+          def mixcut(outname, seglist, label):
+              lst = f"{outname}.list.txt"
+              with open(lst,"w") as f:
+                  for k in seglist: f.write(f"file 'seg/{k:02d}.mp4'\n")
+              rawname = f"{outname}.raw.mp4"
+              subprocess.run([FF,"-y","-f","concat","-safe","0","-i",lst,
+                  "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
+                  "-c:a","aac","-b:a","256k",rawname],check=True)
+              CT = dur(rawname)
+              cdur = [dur(f"seg/{k:02d}.mp4") for k in seglist]
+              cstarts = []; cacc = 0.0
+              for d in cdur: cstarts.append(cacc); cacc += d
+              cards = [cstarts[j] for j,k in enumerate(seglist) if k in CARD_IDX]
+              print(label, "runtime:", CT, "cards:", cards)
+              if not _os.path.exists(BED):
+                  subprocess.run([FF,"-y","-i",rawname,"-c","copy",outname],check=True)
+                  return CT, cards
+              # envelope: present from frame one; swell on each card;
+              # silence->hit on the offer card (last 2.8s card); outro rides out
+              short = [c for c in cards[:-1]] if len(cards)>1 else cards
+              outro_c = cards[-1] if cards else CT-4.0
+              offer_c = short[-1] if short else None
+              fk = [(0,0.38)]
+              for c in short[:-1] if offer_c is not None else short:
+                  fk += [(c-0.6,0.44),(c,0.6),(c+2.4,0.6),(c+3.0,0.28)]
+              if offer_c is not None:
+                  fk += [(offer_c-1.2,0.30),(offer_c-0.7,0.04),(offer_c-0.05,0.04),
+                         (offer_c,0.64),(offer_c+2.4,0.64),(offer_c+2.9,0.34)]
+              fk += [(outro_c-0.5,0.42),(outro_c,0.64),(CT,0.64)]
+              fk = sorted(set(fk), key=lambda x: x[0])
+              fk = [k for j,k in enumerate(fk) if j==0 or k[0] > fk[j-1][0] + 0.02]
               fexpr = f"{fk[-1][1]:.3f}"
               for (t0,v0),(t1,v1) in reversed(list(zip(fk, fk[1:]))):
                   se = f"({v0:.3f}+({v1:.3f}-{v0:.3f})*(t-{t0:.2f})/{max(t1-t0,0.01):.2f})"
                   fexpr = f"if(lt(t,{t1:.2f}),{se},{fexpr})"
               fenv = f"volume='{fexpr}':eval=frame"
-              ffades = f"fade=t=in:st=0:d=0.4,fade=t=out:st={FT-0.7:.2f}:d=0.7"
-              if _os.path.exists("work/fa_sting.m4a"):
-                  fd1,fd3 = int(f1*1000),int(f3*1000)
-                  ffc = (f"[1:a]silenceremove=start_periods=1:start_threshold=-40dB,aloop=loop=-1:size=2e9,atrim=0:{FT:.2f},{fenv},afade=t=out:st={FT-1.0:.2f}:d=1.0[m];"
-                         f"[2:a]asplit=2[s1][s3];"
-                         f"[s1]adelay={fd1}|{fd1},volume=0.5[st1];"
-                         f"[s3]adelay={fd3}|{fd3},volume=0.6[st3];"
-                         f"[m][st1][st3]amix=inputs=3:duration=first:normalize=0[mm];"
-                         f"[0:a][mm]amix=inputs=2:duration=first:normalize=0[aout];"
-                         f"[0:v]{ffades}[vout]")
-                  fin = [FF,"-y","-i","fa_cut.mp4","-i",BED,"-i","work/fa_sting.m4a"]
+              ffades = f"fade=t=in:st=0:d=0.4,fade=t=out:st={CT-0.7:.2f}:d=0.7"
+              stc = [c for c in cards if c != outro_c][:3]
+              if _os.path.exists("work/fa_sting.m4a") and stc:
+                  splits = "".join(f"[s{j}]" for j in range(len(stc)))
+                  ffc = (f"[1:a]silenceremove=start_periods=1:start_threshold=-40dB,aloop=loop=-1:size=2e9,atrim=0:{CT:.2f},{fenv},afade=t=out:st={CT-1.0:.2f}:d=1.0[m];"
+                         f"[2:a]asplit={len(stc)}{splits};")
+                  for j,c in enumerate(stc):
+                      dd = int(c*1000); vv = 0.6 if c == offer_c else 0.5
+                      ffc += f"[s{j}]adelay={dd}|{dd},volume={vv}[st{j}];"
+                  ffc += (f"[m]{''.join(f'[st{j}]' for j in range(len(stc)))}amix=inputs={len(stc)+1}:duration=first:normalize=0[mm];"
+                          f"[0:a][mm]amix=inputs=2:duration=first:normalize=0[aout];"
+                          f"[0:v]{ffades}[vout]")
+                  fin = [FF,"-y","-i",rawname,"-i",BED,"-i","work/fa_sting.m4a"]
               else:
-                  ffc = (f"[1:a]silenceremove=start_periods=1:start_threshold=-40dB,aloop=loop=-1:size=2e9,atrim=0:{FT:.2f},{fenv},afade=t=out:st={FT-1.0:.2f}:d=1.0[m];"
+                  ffc = (f"[1:a]silenceremove=start_periods=1:start_threshold=-40dB,aloop=loop=-1:size=2e9,atrim=0:{CT:.2f},{fenv},afade=t=out:st={CT-1.0:.2f}:d=1.0[m];"
                          f"[0:a][m]amix=inputs=2:duration=first:normalize=0[aout];[0:v]{ffades}[vout]")
-                  fin = [FF,"-y","-i","fa_cut.mp4","-i",BED]
+                  fin = [FF,"-y","-i",rawname,"-i",BED]
               subprocess.run(fin + ["-filter_complex",ffc,"-map","[vout]","-map","[aout]",
                   "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
-                  "-c:a","aac","-b:a","256k","-movflags","+faststart","Courtney_AD55_FA.mp4"],check=True)
-          else:
-              subprocess.run([FF,"-y","-i","fa_cut.mp4","-c","copy","Courtney_AD55_FA.mp4"],check=True)
-          subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size",
-              "-of","default=noprint_wrappers=1","Courtney_AD55_FA.mp4"])
+                  "-c:a","aac","-b:a","256k","-movflags","+faststart",outname],check=True)
+              subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size",
+                  "-of","default=noprint_wrappers=1",outname])
+              return CT, cards
+
+          # THE 90s FULL-SCRIPT CUT: every script section, sentence-boundary cuts only.
+          # hook+noise -> breath/turn -> card1 -> willpower/path -> card2 ->
+          # pillars run -> 18 lessons -> blueprint -> Harvard 14yrs -> LLA offer
+          # "raise your hand" -> offer card -> class in session -> I'm Courtney -> outro
+          S90 = [1,2,3,4,5,6,7, 9, 12,13, 15, 17,18,19,20,21,22,23, 25,26, 29, 32,33, 37, 39,40, 41]
+          T90, cards90 = mixcut("Courtney_AD90S.mp4", S90, "AD90S")
+
+          # FA-length cut (~55s): tightest spine
+          FA = [1,2,3,4,5,6,7, 9, 17,18,19,20,21,22,23, 29, 37, 40, 41]
+          TFA, cardsFA = mixcut("Courtney_AD55_FA.mp4", FA, "AD55")
+
           with open("EDIT_AUDIT.md","a") as f:
-              f.write(f"\n## FA-length cut\n\nRuntime: {FT:.2f}s; cards at {', '.join(f'{t:.2f}' for t in fcards)}\n")
+              f.write(f"\n## 90s full-script cut\n\nRuntime: {T90:.2f}s; cards at {', '.join(f'{t:.2f}' for t in cards90)}\n")
+              f.write(f"\n## FA-length cut\n\nRuntime: {TFA:.2f}s; cards at {', '.join(f'{t:.2f}' for t in cardsFA)}\n")
 
           PY
 
@@ -312,6 +336,7 @@ jobs:
           git lfs install
           mkdir -p deliverables
           cp Courtney_AD90_FINAL.mp4 deliverables/
+          cp Courtney_AD90S.mp4 deliverables/ || true
           cp Courtney_AD55_FA.mp4 deliverables/ || true
           cp EDIT_AUDIT.md production/EDIT_AUDIT.md || true
           git add deliverables/ production/EDIT_AUDIT.md
