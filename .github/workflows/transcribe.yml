@@ -1,0 +1,45 @@
+name: Transcribe raw 0717 (word timestamps)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Transcribe
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip3 install --quiet faster-whisper
+          ffmpeg -y -loglevel error -i deliverables/audio_full_0717.m4a -ac 1 -ar 16000 a.wav
+          python3 - <<'PY'
+          from faster_whisper import WhisperModel
+          import json
+          m = WhisperModel("base", compute_type="int8")
+          segs, info = m.transcribe("a.wav", word_timestamps=True)
+          out=[]
+          for s in segs:
+              out.append({"start":round(s.start,2),"end":round(s.end,2),"text":s.text,
+                          "words":[{"s":round(w.start,2),"e":round(w.end,2),"w":w.word} for w in (s.words or [])]})
+          json.dump(out, open("production/transcript_0717.json","w"))
+          with open("production/transcript_0717.txt","w") as f:
+              for s in out:
+                  f.write(f"[{s['start']:7.2f} - {s['end']:7.2f}] {s['text']}\n")
+          print("segments:", len(out))
+          PY
+      - name: Commit
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add production/transcript_0717.json production/transcript_0717.txt
+          git commit -m "Word-level transcript of raw 0717"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
