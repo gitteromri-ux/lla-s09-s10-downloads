@@ -1,0 +1,213 @@
+name: MASTERCLASS CUT (final takes, headlines, big captions, music arc)
+
+on:
+  workflow_dispatch:
+    inputs:
+      clean_run_id:
+        description: "Run id of clean assembly artifact"
+        required: false
+        default: "29731883948"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: Courtney_CINEMA_FINAL_0717
+          run-id: ${{ github.event.inputs.clean_run_id }}
+          github-token: ${{ github.token }}
+          path: art
+      - name: Setup
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs fonts-inter
+          cp art/Courtney_CINEMA_FINAL_0717.mp4 base.mp4
+          mkdir -p fonts
+          curl -sL --fail -o fonts/Fraunces.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
+          A="https://media.githubusercontent.com/media/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
+          R="https://raw.githubusercontent.com/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
+          for c in cta1 cta2 cta3 end; do
+            curl -sS -L --fail --retry 4 "$R/cards/png/horizontal/${c}_h.png" -o "${c}.png" \
+              || curl -sS -L --fail --retry 4 "$A/cards/png/horizontal/${c}_h.png" -o "${c}.png"
+          done
+          for c in site_yoga site_nutrition site_sleep swimmer_dawn site_supplements site_wearables data_curve site_protocol; do
+            curl -sS -L --fail --retry 4 "$A/footage/clips/$c.mp4" -o "$c.mp4"
+          done
+      - name: Build cut + captions + headlines
+        run: |
+          set -e
+          python3 - <<'PY'
+          import json, subprocess, os
+          T = json.load(open("production/transcript_0717.json"))
+          words = [(w["s"], w["e"], w["w"].strip()) for seg in T for w in seg["words"]]
+          FF="ffmpeg"; W,H,FPS=1920,1080,30
+          os.makedirs("seg", exist_ok=True)
+          TIGHT="crop=1454:818:(iw-1454)/2:(ih-818)*0.30,scale=1920:1080:flags=lanczos,"
+          ACTS=[
+            dict(name="hook",   s=39.60, e=70.60, head="THE DIRECT PATH TO LONGEVITY",
+                 broll=[("site_yoga",53.90,3.40)]),
+            dict(name="why",    s=73.90, e=101.60, head="IT WASN'T YOUR FAULT", broll=[]),
+            dict(name="pillars",s=127.40,e=160.70, head="SIX PILLARS · ONE CURRICULUM",
+                 broll=[("site_nutrition",137.10,1.90),("site_sleep",139.00,1.80),
+                        ("swimmer_dawn",140.80,1.80),("site_supplements",142.60,1.90),
+                        ("site_wearables",144.50,1.70)]),
+            dict(name="proof",  s=165.40,e=189.80, head="+14 YEARS · PROVEN",
+                 broll=[("data_curve",171.20,5.00)]),
+            dict(name="academy",s=195.80,e=221.00, head="18 LIVE SESSIONS · REAL COACHING",
+                 broll=[("site_protocol",213.40,4.60)]),
+            dict(name="close",  s=377.50,e=401.90, head="CLASS IS IN SESSION", broll=[]),
+          ]
+          CARDS_AFTER={"pillars":"cta1","proof":"cta2","academy":"cta3"}
+          gaps=[]
+          for i in range(len(words)-1):
+              g0,g1 = words[i][1], words[i+1][0]
+              if g1-g0 >= 0.10: gaps.append((g0+g1)/2)
+          def snap(t, lo, hi):
+              c=[g for g in gaps if lo< g < hi]
+              return min(c, key=lambda g: abs(g-t)) if c else t
+          idx=0
+          def enc_her(ss,dur,tight):
+              global idx; idx+=1
+              vf=(TIGHT if tight else "")+f"scale={W}:{H},fps={FPS}"
+              subprocess.run([FF,"-y","-loglevel","error","-ss",str(ss),"-t",str(dur),"-i","base.mp4",
+                "-vf",vf,"-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
+          def enc_broll(clip,dur,a_ss):
+              global idx; idx+=1
+              subprocess.run([FF,"-y","-loglevel","error","-stream_loop","-1","-t",str(dur),"-i",f"{clip}.mp4",
+                "-ss",str(a_ss),"-t",str(dur),"-i","base.mp4","-map","0:v","-map","1:a",
+                "-vf",f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},eq=brightness=0.05:saturation=1.1,unsharp=5:5:0.4",
+                "-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
+          def enc_card(png,dur):
+              global idx; idx+=1
+              subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i",png,
+                "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
+                "-vf",f"scale={W}:{H},fps={FPS},fade=t=in:d=0.3,fade=t=out:st={dur-0.3}:d=0.3",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-shortest",f"seg/{idx:03d}.mp4"],check=True)
+          out_t=0.0; act_map=[]; heads=[]; music_marks={}
+          enc_card("end.png",2.2); out_t+=2.2
+          for act in ACTS:
+              music_marks[act["name"]]=out_t
+              heads.append((out_t+0.15, act["head"]))
+              act_map.append((act["s"],act["e"],out_t))
+              cur=act["s"]; tight=False
+              events=sorted(act["broll"], key=lambda b:b[1])
+              for clip,bs,bd in events:
+                  while cur < bs-0.4:
+                      nxt=snap(min(cur+3.2, bs), cur+1.2, bs+0.01)
+                      if nxt<=cur: nxt=bs
+                      enc_her(cur, nxt-cur, tight); tight=not tight; cur=nxt
+                  if bs>cur: enc_her(cur, bs-cur, tight); tight=not tight
+                  enc_broll(clip, bd, bs); cur=bs+bd
+              while cur < act["e"]-0.2:
+                  nxt=snap(min(cur+3.2, act["e"]), cur+1.2, act["e"]+0.01)
+                  if nxt<=cur+0.3: nxt=act["e"]
+                  enc_her(cur, min(nxt,act["e"])-cur, tight); tight=not tight; cur=min(nxt,act["e"])
+              out_t += act["e"]-act["s"]
+              if act["name"] in CARDS_AFTER:
+                  enc_card(CARDS_AFTER[act["name"]]+".png", 2.5); out_t+=2.5
+          music_marks["end"]=out_t
+          enc_card("end.png",4.2); out_t+=4.2
+          with open("list.txt","w") as f:
+              for k in range(1,idx+1): f.write(f"file 'seg/{k:03d}.mp4'\n")
+          subprocess.run([FF,"-y","-loglevel","error","-f","concat","-safe","0","-i","list.txt","-c","copy","cut.mp4"],check=True)
+          def src2out(t):
+              for s,e,o in act_map:
+                  if s-0.3 <= t <= e+0.3: return o + (t-s)
+              return None
+          HILITE={"direct","path","six","pillars","18","14","blueprint","class","session","seat","courtney","longevity","academy","harvard"}
+          BLUE=r"{\c&HFF6E00&}"; WHITE=r"{\c&HFFFFFF&}"
+          lines=[]; cur=[]; t0=None
+          for s,e,wd in words:
+              o=src2out(s)
+              if o is None:
+                  if cur: lines.append((t0,last_e,cur)); cur=[]; t0=None
+                  continue
+              if t0 is None: t0=o
+              cur.append(wd); last_e=src2out(e) or (o+0.4)
+              if len(cur)>=5 or (wd and wd[-1] in ".!?" and len(cur)>=3):
+                  lines.append((t0,last_e,cur)); cur=[]; t0=None
+          if cur: lines.append((t0,last_e,cur))
+          def ts(t): return f"{int(t//3600)}:{int(t%3600//60):02d}:{t%60:05.2f}"
+          ass=("[Script Info]\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\n"
+            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+            "Style: Cap,Inter,68,&H00FFFFFF,&H00FFFFFF,&H00000000,&HAA000000,-1,0,0,0,100,100,0,0,1,0,3,2,70,70,190,1\n"
+            "Style: Head,Fraunces,116,&H00EAF2F5,&H00EAF2F5,&H00000000,&H66000000,-1,0,0,0,100,100,6,0,1,0,4,8,60,60,150,1\n\n"
+            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+          for st,en,ws in lines:
+              txt=" ".join((BLUE+w+WHITE) if w.strip(".,!?;").lower() in HILITE else w for w in ws)
+              cap=txt[0].upper()+txt[1:] if txt and txt[0].isalpha() else txt
+              ass+=f"Dialogue: 0,{ts(st)},{ts(max(en,st+0.7))},Cap,,0,0,0,,{cap}\n"
+          for ht,txt in heads:
+              ass+=f"Dialogue: 1,{ts(ht)},{ts(ht+2.6)},Head,,0,0,0,,{{\\fad(250,250)}}{txt}\n"
+          open("caps.ass","w").write(ass)
+          json.dump(music_marks, open("marks.json","w"))
+          print("segments:",idx,"out:",round(out_t,1),"caps:",len(lines))
+          PY
+      - name: Final encode (captions + music arc)
+        run: |
+          set -e
+          python3 - <<'PY'
+          import json, subprocess
+          mk=json.load(open("marks.json"))
+          D=float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0","cut.mp4"],capture_output=True,text=True).stdout)
+          tp,tc,te = mk["proof"], mk["close"], mk["end"]
+          vol=(f"if(lt(t,{tp}),0.12,"
+               f"if(lt(t,{tc}),0.12+0.08*min(1,(t-{tp})/3),"
+               f"if(lt(t,{te}),0.20+0.18*min(1,(t-{tc})/4),0.42)))")
+          cmd=["ffmpeg","-y","-loglevel","error","-i","cut.mp4","-stream_loop","-1","-i","assets/music_bed_0717.mp3",
+            "-filter_complex",
+            f"[0:v]subtitles=caps.ass:fontsdir=fonts[vout];"
+            f"[1:a]volume=volume='{vol}':eval=frame,afade=t=out:st={D-0.9}:d=0.9[mus];"
+            f"[0:a][mus]amix=inputs=2:duration=first:normalize=0[aout]",
+            "-map","[vout]","-map","[aout]","-c:v","libx264","-crf","16","-preset","medium",
+            "-pix_fmt","yuv420p","-c:a","aac","-b:a","256k","-movflags","+faststart","Courtney_MASTERCLASS.mp4"]
+          subprocess.run(cmd,check=True)
+          subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size","-of","default=noprint_wrappers=1","Courtney_MASTERCLASS.mp4"],check=True)
+          PY
+          mkdir -p deliverables/qc_cinema
+          for p in 1 4 12 18 36 62 78 96 112 125 145 168 175; do
+            ffmpeg -y -loglevel error -ss "$p" -i Courtney_MASTERCLASS.mp4 -frames:v 1 "deliverables/qc_cinema/mc_${p}.jpg" || true
+          done
+      - name: Publish to finalcut page
+        run: |
+          set -e
+          python3 - <<'PY'
+          html=open('finalcut/index.html').read()
+          if 'Courtney_MASTERCLASS' not in html:
+              url="https://media.githubusercontent.com/media/gitteromri-ux/lla-s09-s10-downloads/main/deliverables/Courtney_MASTERCLASS.mp4"
+              sec=('\n<h2>&#127942; MASTERCLASS CUT <span class="badge">HERO · FINAL TAKES</span></h2>\n'
+                   '<p class="note">Final takes only · act headlines · large captions · word-linked footage · music arc to close</p>\n'
+                   '<div class="card">\n<h3>Courtney · MasterClass Cut</h3><div class="meta">1080p · LEAD-GEN MASTER</div>\n'
+                   f'<video src="{url}" autoplay muted loop playsinline controls preload="metadata"></video>\n'
+                   f'<br><a class="btn" href="{url}" download>&#11015; Download MasterClass Cut</a>\n</div>\n')
+              i=html.find('<h2>')
+              open('finalcut/index.html','w').write(html[:i]+sec+html[i:])
+              print("page card added")
+          PY
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp Courtney_MASTERCLASS.mp4 deliverables/
+          git add .gitattributes finalcut/index.html deliverables/Courtney_MASTERCLASS.mp4 deliverables/qc_cinema
+          git commit -m "MASTERCLASS CUT: final takes, headlines, captions, music arc"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Courtney_MASTERCLASS
+          path: Courtney_MASTERCLASS.mp4
+          if-no-files-found: error
