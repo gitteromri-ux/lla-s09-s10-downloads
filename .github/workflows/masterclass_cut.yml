@@ -42,6 +42,9 @@ jobs:
           for c in site_yoga site_nutrition site_sleep swimmer_dawn site_supplements site_wearables data_curve site_protocol; do
             curl -sS -L --fail --retry 4 "$A/footage/clips/$c.mp4" -o "$c.mp4"
           done
+          # client-supplied insert: longevity-noise screens montage (ADD-1)
+          curl -sS -L --fail --retry 4 \
+            "https://media.githubusercontent.com/media/${{ github.repository }}/main/deliverables/fetched/asset_1.mp4" -o noise_screens.mp4
       - name: Build cut + captions + headlines
         run: |
           set -e
@@ -54,7 +57,7 @@ jobs:
           TIGHT="crop=1454:818:(iw-1454)/2:(ih-818)*0.30,scale=1920:1080:flags=lanczos,"
           ACTS=[
             dict(name="hook",   s=39.60, e=70.60, head="THE DIRECT PATH TO LONGEVITY",
-                 broll=[("site_yoga",53.90,3.40)]),
+                 broll=[("noise_screens",44.16,8.70),("site_yoga",53.90,3.40)]),
             dict(name="why",    s=73.90, e=101.60, head="IT WASN'T YOUR FAULT", broll=[]),
             dict(name="pillars",s=127.40,e=160.70, head="SIX PILLARS · ONE CURRICULUM",
                  broll=[("site_nutrition",137.10,1.90),("site_sleep",139.00,1.80),
