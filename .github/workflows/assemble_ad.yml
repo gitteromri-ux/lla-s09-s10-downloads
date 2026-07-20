@@ -38,10 +38,11 @@ jobs:
           done
           curl -sL --fail "$M/production/music/fa_sting.m4a" -o work/fa_sting.m4a || true
           # THE bed, in order of preference:
-          # 1. client-supplied track  2. stem-separated FA music  3. temp bed
-          curl -sL --fail "$M/production/music/client_track_lgvty.mp3?nc=$TS" -o work/fa_bed.m4a || true
-          if ! ffprobe -v error -show_entries format=duration -of csv=p=0 work/fa_bed.m4a >/dev/null 2>&1; then
-            rm -f work/fa_bed.m4a
+          # 1. client-supplied track (regular git file, already in checkout — no CDN)
+          # 2. stem-separated FA music  3. temp bed
+          if [ -f production/music/client_track_lgvty.mp3 ]; then
+            cp production/music/client_track_lgvty.mp3 work/fa_bed.m4a
+          else
             curl -sL --fail "$M/production/music/fa_music_bed_long.m4a?nc=$TS" -o work/fa_bed.m4a || true
           fi
           if ffprobe -v error -show_entries format=duration -of csv=p=0 work/fa_bed.m4a >/dev/null 2>&1; then
