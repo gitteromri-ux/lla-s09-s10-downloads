@@ -37,10 +37,17 @@ jobs:
             curl -sL --fail "$M/production/cards/anim/${c}_h.mp4?nc=$TS" -o "work/anim_${c}_h.mp4"
           done
           curl -sL --fail "$M/production/music/fa_sting.m4a" -o work/fa_sting.m4a || true
-          for u in "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Meditation%20Impromptu%2002.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Heart%20of%20Nowhere.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Almost%20in%20F.mp3"; do
-            curl -sL --max-time 60 "$u" -o work/bed.mp3 || continue
-            ffprobe -v error -show_entries format=duration -of csv=p=0 work/bed.mp3 >/dev/null 2>&1 && { echo "temp bed: $u"; break; } || rm -f work/bed.mp3
-          done
+          # THE bed: real FA music, French VO stripped by Demucs (separate_stems.yml)
+          curl -sL --fail "$M/production/music/fa_music_bed_long.m4a?nc=$TS" -o work/fa_bed.m4a || true
+          if ffprobe -v error -show_entries format=duration -of csv=p=0 work/fa_bed.m4a >/dev/null 2>&1; then
+            echo "bed: REAL FA MUSIC (stem-separated)"
+          else
+            rm -f work/fa_bed.m4a
+            for u in "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Meditation%20Impromptu%2002.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Heart%20of%20Nowhere.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Almost%20in%20F.mp3"; do
+              curl -sL --max-time 60 "$u" -o work/bed.mp3 || continue
+              ffprobe -v error -show_entries format=duration -of csv=p=0 work/bed.mp3 >/dev/null 2>&1 && { echo "temp bed: $u"; break; } || rm -f work/bed.mp3
+            done
+          fi
           ls -la work
 
       - name: Build edit
@@ -164,7 +171,8 @@ jobs:
           print("card times:", card_ts, "total:", T)
           fades = f"fade=t=in:st=0:d=0.5,fade=t=out:st={T-0.8:.2f}:d=0.8"
           import os as _os
-          if _os.path.exists("work/bed.mp3"):
+          BED = "work/fa_bed.m4a" if _os.path.exists("work/fa_bed.m4a") else "work/bed.mp3"
+          if _os.path.exists(BED):
               c1,c2,c3,c4 = (card_ts + [20,50,75,85])[:4]
               # keyframed envelope with 0.5s linear ramps (an editor's fader, not a switch)
               br = MARKS.get("breath", 14)
@@ -193,12 +201,12 @@ jobs:
                         f"[m][st1][st2][st3]amix=inputs=4:duration=first:normalize=0[mm];"
                         f"[0:a][mm]amix=inputs=2:duration=first:normalize=0[aout];"
                         f"[0:v]{fades}[vout]")
-                  inputs = [FF,"-y","-i","cut.mp4","-i","work/bed.mp3","-i","work/fa_sting.m4a"]
+                  inputs = [FF,"-y","-i","cut.mp4","-i",BED,"-i","work/fa_sting.m4a"]
               else:
                   fc = (f"[1:a]aloop=loop=-1:size=2e9,atrim=0:{T:.2f},{env},afade=t=out:st={T-1.2:.2f}:d=1.2[m];"
                         f"[0:a][m]amix=inputs=2:duration=first:normalize=0[aout];"
                         f"[0:v]{fades}[vout]")
-                  inputs = [FF,"-y","-i","cut.mp4","-i","work/bed.mp3"]
+                  inputs = [FF,"-y","-i","cut.mp4","-i",BED]
               subprocess.run(inputs + [
                   "-filter_complex",fc,"-map","[vout]","-map","[aout]",
                   "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
