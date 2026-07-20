@@ -1,0 +1,51 @@
+name: QC frames from deliverables
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: "Deliverable filename (no path)"
+        required: true
+        default: "Courtney_AD90S.mp4"
+      times:
+        description: "Comma-separated timestamps (s)"
+        required: true
+        default: "2.5,7,12,29,40,82,93"
+
+permissions:
+  contents: write
+
+jobs:
+  qc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Extract frames
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          TS=$(date +%s)
+          F='${{ github.event.inputs.file }}'
+          curl -sL --fail "https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/deliverables/${F}?nc=${TS}" -o vid.mp4
+          mkdir -p deliverables/qc_ad
+          rm -f deliverables/qc_ad/*.png
+          IFS=',' read -ra TT <<< '${{ github.event.inputs.times }}'
+          for t in "${TT[@]}"; do
+            ffmpeg -y -ss "$t" -i vid.mp4 -frames:v 1 "deliverables/qc_ad/${F%.mp4}_t${t}.png"
+          done
+          ffprobe -v error -show_entries format=duration -of csv=p=0 vid.mp4
+          ffmpeg -i vid.mp4 -af volumedetect -f null - 2>&1 | grep -E "mean_volume|max_volume" || true
+          ls -la deliverables/qc_ad
+      - name: Commit
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add deliverables/qc_ad
+          git commit -m "QC frames from deliverable"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
