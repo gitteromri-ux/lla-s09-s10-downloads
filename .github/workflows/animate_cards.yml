@@ -31,6 +31,7 @@ jobs:
           cd production/cards/fonts
           [ -f Fraunces.ttf ] || curl -sL --fail -o Fraunces.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
           [ -f Inter.ttf ] || curl -sL --fail -o Inter.ttf "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
+          [ -f Archivo.ttf ] || curl -sL --fail -o Archivo.ttf "https://github.com/google/fonts/raw/main/ofl/archivoblack/ArchivoBlack-Regular.ttf"
 
       - name: Record animations
         run: |
