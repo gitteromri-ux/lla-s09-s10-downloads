@@ -89,6 +89,7 @@ jobs:
                 f"seg/{idx:02d}.mp4"],check=True)
 
           def cardseg(idx, png, dur):
+              CARD_IDX.append(idx)
               TL.append(dur)
               cid = png.split("/")[-1].replace("_h.png","").replace(".png","")
               anim = f"work/anim_{cid}_h.mp4"
@@ -105,6 +106,7 @@ jobs:
 
           i=0
           TL = []      # planned duration per segment, in order
+          CARD_IDX = []  # explicit card segment indices — never guess from durations
           MARKS = {}   # named emotional beats -> timeline seconds
           def mark(name): MARKS[name] = sum(TL)
           def nx():
@@ -179,8 +181,9 @@ jobs:
           starts = []
           acc = 0.0
           for d in segd: starts.append(acc); acc += d
-          # cards are the cardseg segments: find by matching known durations 3.0/3.0/3.0/4.2 in order
-          card_ts = [t for t,d in zip(starts,segd) if abs(d-2.8)<0.15 or abs(d-4.2)<0.15]
+          # cards are the EXPLICITLY recorded cardseg indices (duration-matching
+          # previously false-positived on ~3s b-roll and misplaced stings)
+          card_ts = [starts[k-1] for k in CARD_IDX]
           print("card times:", card_ts, "total:", T)
           fades = f"fade=t=in:st=0:d=0.5,fade=t=out:st={T-0.8:.2f}:d=0.8"
           import os as _os
@@ -237,7 +240,7 @@ jobs:
               f.write(f"Total runtime: {T:.2f}s\n\nCard times (s): {', '.join(f'{t:.2f}' for t in card_ts)}\n\n")
               f.write("| # | start | dur | type |\n|---|---|---|---|\n")
               for k,(st,d) in enumerate(zip(starts,segd),1):
-                  typ = "CARD" if (abs(d-2.8)<0.15 or abs(d-4.2)<0.15) else "footage/talent"
+                  typ = "CARD" if k in CARD_IDX else "footage/talent"
                   f.write(f"| {k} | {st:.2f} | {d:.2f} | {typ} |\n")
 
           # ===== SECOND DELIVERABLE: true FA-length cut (~55s) =====
@@ -255,7 +258,7 @@ jobs:
           fdur = [dur(f"seg/{k:02d}.mp4") for k in FA]
           fstarts = []; facc = 0.0
           for d in fdur: fstarts.append(facc); facc += d
-          fcards = [t for t,d in zip(fstarts,fdur) if abs(d-2.8)<0.15 or abs(d-4.2)<0.15]
+          fcards = [fstarts[j] for j,k in enumerate(FA) if k in CARD_IDX]
           f1,f3,f4 = (fcards + [20,44,50])[:3]
           print("FA cut:", FT, "cards:", fcards)
           if _os.path.exists(BED):
