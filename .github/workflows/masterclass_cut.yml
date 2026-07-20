@@ -35,8 +35,10 @@ jobs:
           mkdir -p fonts
           curl -sL --fail -o Fraunces_var.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
           curl -sL --fail -o Inter_var.ttf "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
-          fonttools varLib.instancer -q -o fonts/Inter-SemiBold.ttf Inter_var.ttf wght=600 opsz=28
+          fonttools varLib.instancer -q -o fonts/Inter-Bold.ttf Inter_var.ttf wght=700 opsz=32
           fonttools varLib.instancer -q -o fonts/Fraunces-Display.ttf Fraunces_var.ttf wght=480 opsz=144 SOFT=0 WONK=0
+          # continuous room tone bed (quiet stretch of the raw)
+          ffmpeg -y -loglevel error -ss 102.30 -t 3.20 -i base.mp4 -vn -c:a pcm_s16le tone.wav
           A="https://media.githubusercontent.com/media/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
           R="https://raw.githubusercontent.com/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
           for c in cta1 cta2 cta3 end; do
@@ -46,7 +48,7 @@ jobs:
           for c in site_yoga site_nutrition site_sleep swimmer_dawn site_supplements site_wearables data_curve site_protocol; do
             curl -sS -L --fail --retry 4 "$A/footage/clips/$c.mp4" -o "$c.mp4"
           done
-          # client-supplied insert: longevity-noise screens montage (ADD-1)
+          # client-supplied insert: longevity-noise screens montage (ADD-1, 8K)
           curl -sS -L --fail --retry 4 \
             "https://media.githubusercontent.com/media/${{ github.repository }}/main/deliverables/fetched/asset_1.mp4" -o noise_screens.mp4
       - name: Build cut + captions + headlines
@@ -58,27 +60,34 @@ jobs:
           words = [(w["s"], w["e"], w["w"].strip()) for seg in T for w in seg["words"]]
           FF="ffmpeg"; W,H,FPS=1920,1080,30
           os.makedirs("seg", exist_ok=True)
+          GRADE="curves=preset=medium_contrast,eq=saturation=1.06:brightness=0.012,colorbalance=rm=.035:bm=-.035"
           TIGHT="crop=1454:818:(iw-1454)/2:(ih-818)*0.30,scale=1920:1080:flags=lanczos,"
           ACTS=[
             dict(name="hook",   s=39.60, e=70.60,
                  heads=[(44.90,"LONGEVITY ADVICE IS EVERYWHERE."),
                         (58.74,"YOUR DIRECT PATH TO LONGEVITY")],
+                 emph=[44.16,50.52,58.74,63.90,67.34],
                  broll=[("noise_screens",44.90,5.60),("site_yoga",53.90,3.40)]),
             dict(name="why",    s=73.90, e=101.60,
-                 heads=[(74.02,"WHY LONGEVITY NEVER STUCK FOR YOU")], broll=[]),
+                 heads=[(74.02,"WHY LONGEVITY NEVER STUCK FOR YOU")],
+                 emph=[78.94,83.86,87.82,92.04,94.30,96.70,99.04], broll=[]),
             dict(name="pillars",s=127.40,e=160.70,
                  heads=[(127.50,"THE SIX PILLARS OF A LONGER LIFE")],
+                 emph=[133.00,147.12,150.60,153.74,157.28],
                  broll=[("site_nutrition",137.10,1.90),("site_sleep",139.00,1.80),
                         ("swimmer_dawn",140.80,1.80),("site_supplements",142.60,1.90),
                         ("site_wearables",144.50,1.70)]),
             dict(name="proof",  s=165.40,e=189.80,
                  heads=[(171.00,"+14 YEARS LIFE TRAJECTORY")],
+                 emph=[177.40,183.20,186.02],
                  broll=[("data_curve",171.20,5.00)]),
             dict(name="academy",s=195.80,e=221.00,
                  heads=[(195.94,"LONGEVITY LIFE ACADEMY · 18 LIVE SESSION COURSE")],
+                 emph=[199.80,205.16,208.80,217.50],
                  broll=[("site_protocol",213.40,4.60)]),
-            dict(name="close",  s=377.50,e=401.90,
-                 heads=[(377.60,"YOUR LONGEVITY BLUEPRINT")], broll=[]),
+            dict(name="close",  s=377.50,e=400.40,
+                 heads=[(377.60,"YOUR LONGEVITY BLUEPRINT")],
+                 emph=[380.08,382.82,384.98,387.80,390.64,394.44,397.72], broll=[]),
           ]
           CARDS_AFTER={"pillars":"cta1","proof":"cta2","academy":"cta3"}
           gaps=[]
@@ -88,19 +97,25 @@ jobs:
           def snap(t, lo, hi):
               c=[g for g in gaps if lo< g < hi]
               return min(c, key=lambda g: abs(g-t)) if c else t
-          idx=0
-          def enc_her(ss,dur,tight):
+          idx=0; tight=False
+          def enc_her(ss,dur,tg):
               global idx; idx+=1
-              vf=(TIGHT if tight else "")+f"scale={W}:{H},fps={FPS}"
+              vf=(TIGHT if tg else "")+GRADE+f",scale={W}:{H},fps={FPS}"
               subprocess.run([FF,"-y","-loglevel","error","-ss",str(ss),"-t",str(dur),"-i","base.mp4",
                 "-vf",vf,"-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
           def enc_broll(clip,dur,a_ss):
               global idx; idx+=1
+              if clip=="noise_screens":
+                  vf=(f"crop=w=iw*0.80:h=ih*0.80:x=(iw-ow)*0.5*min(1\\,t/{dur}):y=(ih-oh)*0.25,"
+                      f"scale={W}:{H}:flags=lanczos,fps={FPS},"+GRADE)
+              else:
+                  vf=(f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},"
+                      +GRADE+",eq=brightness=0.04,unsharp=5:5:0.4")
               subprocess.run([FF,"-y","-loglevel","error","-stream_loop","-1","-t",str(dur),"-i",f"{clip}.mp4",
                 "-ss",str(a_ss),"-t",str(dur),"-i","base.mp4","-map","0:v","-map","1:a",
-                "-vf",f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},eq=brightness=0.05:saturation=1.1,unsharp=5:5:0.4",
+                "-vf",vf,
                 "-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
@@ -111,27 +126,50 @@ jobs:
                 "-vf",f"scale={W}:{H},fps={FPS},fade=t=in:d=0.45,fade=t=out:st={dur-0.45}:d=0.45",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-shortest",f"seg/{idx:03d}.mp4"],check=True)
+          def enc_freeze(frame_at,a_ss,dur):
+              global idx; idx+=1
+              subprocess.run([FF,"-y","-loglevel","error","-ss",str(frame_at),"-i","base.mp4",
+                "-frames:v","1","hold.png"],check=True)
+              subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i","hold.png",
+                "-ss",str(a_ss),"-t",str(dur),"-i","base.mp4","-map","0:v","-map","1:a",
+                "-vf",GRADE+f",scale={W}:{H},fps={FPS}",
+                "-af","afade=t=in:d=0.02",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
+          def her_range(a,b,emph,force_tight_from=None):
+              global tight
+              pts=sorted([t for t in emph if a+0.6 < t < b-0.5])
+              marks=[a]+pts+[b]
+              for i in range(len(marks)-1):
+                  x0,x1=marks[i],marks[i+1]
+                  cur=x0
+                  while x1-cur > 4.8:
+                      nxt=snap(cur+3.0, cur+1.4, x1-0.8)
+                      if nxt<=cur+0.5: break
+                      tg = tight if not (force_tight_from and cur>=force_tight_from) else True
+                      enc_her(cur, nxt-cur, tg); tight=not tight; cur=nxt
+                  if x1-cur>0.25:
+                      tg = tight if not (force_tight_from and cur>=force_tight_from) else True
+                      enc_her(cur, x1-cur, tg); tight=not tight
           out_t=0.0; act_map=[]; heads=[]; music_marks={}
           enc_card("end.png",2.2); out_t+=2.2
           for act in ACTS:
               music_marks[act["name"]]=out_t
               for ht,txt in act["heads"]:
                   heads.append((out_t + max(0.15, ht-act["s"]), txt))
-              act_map.append((act["s"],act["e"],out_t))
-              cur=act["s"]; tight=False
-              events=sorted(act["broll"], key=lambda b:b[1])
-              for clip,bs,bd in events:
-                  while cur < bs-0.4:
-                      nxt=snap(min(cur+3.2, bs), cur+1.2, bs+0.01)
-                      if nxt<=cur: nxt=bs
-                      enc_her(cur, nxt-cur, tight); tight=not tight; cur=nxt
-                  if bs>cur: enc_her(cur, bs-cur, tight); tight=not tight
+              ftf = 397.72 if act["name"]=="close" else None
+              cur=act["s"]
+              for clip,bs,bd in sorted(act["broll"], key=lambda b:b[1]):
+                  her_range(cur, bs, act["emph"], ftf)
                   enc_broll(clip, bd, bs); cur=bs+bd
-              while cur < act["e"]-0.2:
-                  nxt=snap(min(cur+3.2, act["e"]), cur+1.2, act["e"]+0.01)
-                  if nxt<=cur+0.3: nxt=act["e"]
-                  enc_her(cur, min(nxt,act["e"])-cur, tight); tight=not tight; cur=min(nxt,act["e"])
-              out_t += act["e"]-act["s"]
+              her_range(cur, act["e"], act["emph"], ftf)
+              if act["name"]=="close":
+                  enc_freeze(400.30, 400.40, 1.70)
+                  act_map.append((act["s"], 402.10, out_t))
+                  out_t += (act["e"]-act["s"]) + 1.70
+              else:
+                  act_map.append((act["s"],act["e"],out_t))
+                  out_t += act["e"]-act["s"]
               if act["name"] in CARDS_AFTER:
                   enc_card(CARDS_AFTER[act["name"]]+".png", 2.5); out_t+=2.5
           music_marks["end"]=out_t
@@ -159,8 +197,8 @@ jobs:
           def ts(t): return f"{int(t//3600)}:{int(t%3600//60):02d}:{t%60:05.2f}"
           ass=("[Script Info]\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\n"
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-            "Style: Cap,Inter,62,&H00FFFFFF,&H00FFFFFF,&H00000000,&H90000000,0,0,0,0,100,100,0.6,0,1,0,1.6,2,80,80,190,1\n"
-            "Style: Head,Fraunces,86,&H00EAF2F5,&H00EAF2F5,&H00000000,&H70000000,0,0,0,0,100,100,9,0,1,0,1.2,8,60,60,130,1\n\n"
+            "Style: Cap,Inter,96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H98000000,0,0,0,0,100,100,0.2,0,1,0,2.2,2,90,90,205,1\n"
+            "Style: Head,Fraunces,86,&H00EAF2F5,&H00EAF2F5,&H00000000,&H70000000,0,0,0,0,100,100,9,0,1,0,1.2,8,60,60,120,1\n\n"
             "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
           for st,en,ws in lines:
               txt=" ".join((BLUE+w+WHITE) if w.strip(".,!?;").lower() in HILITE else w for w in ws)
@@ -172,7 +210,7 @@ jobs:
           json.dump(music_marks, open("marks.json","w"))
           print("segments:",idx,"out:",round(out_t,1),"caps:",len(lines))
           PY
-      - name: Final encode (captions + music arc)
+      - name: Final encode (captions + music arc + room tone)
         run: |
           set -e
           python3 - <<'PY'
@@ -183,18 +221,21 @@ jobs:
           vol=(f"if(lt(t,{tp}),0.12,"
                f"if(lt(t,{tc}),0.12+0.08*min(1,(t-{tp})/3),"
                f"if(lt(t,{te}),0.20+0.18*min(1,(t-{tc})/4),0.42)))")
-          cmd=["ffmpeg","-y","-loglevel","error","-i","cut.mp4","-stream_loop","-1","-i","assets/music_bed_0717.mp3",
+          cmd=["ffmpeg","-y","-loglevel","error","-i","cut.mp4",
+            "-stream_loop","-1","-i","assets/music_bed_0717.mp3",
+            "-stream_loop","-1","-i","tone.wav",
             "-filter_complex",
             f"[0:v]subtitles=caps.ass:fontsdir=fonts[vout];"
             f"[1:a]volume=volume='{vol}':eval=frame,afade=t=out:st={D-0.9}:d=0.9[mus];"
-            f"[0:a][mus]amix=inputs=2:duration=first:normalize=0[aout]",
+            f"[2:a]volume=0.55,afade=t=out:st={D-1.5}:d=1.5[tone];"
+            f"[0:a][mus][tone]amix=inputs=3:duration=first:normalize=0[aout]",
             "-map","[vout]","-map","[aout]","-c:v","libx264","-crf","16","-preset","medium",
             "-pix_fmt","yuv420p","-c:a","aac","-b:a","256k","-movflags","+faststart","Courtney_MASTERCLASS.mp4"]
           subprocess.run(cmd,check=True)
           subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size","-of","default=noprint_wrappers=1","Courtney_MASTERCLASS.mp4"],check=True)
           PY
           mkdir -p deliverables/qc_cinema
-          for p in 1 4 12 18 36 62 78 96 112 125 145 168 175; do
+          for p in 1 4 12 18 36 62 78 96 112 125 145 168 178; do
             ffmpeg -y -loglevel error -ss "$p" -i Courtney_MASTERCLASS.mp4 -frames:v 1 "deliverables/qc_cinema/mc_${p}.jpg" || true
           done
       - name: Publish to finalcut page
@@ -219,7 +260,7 @@ jobs:
           git lfs track "*.mp4" || true
           cp Courtney_MASTERCLASS.mp4 deliverables/
           git add .gitattributes finalcut/index.html deliverables/Courtney_MASTERCLASS.mp4 deliverables/qc_cinema
-          git commit -m "MASTERCLASS CUT: final takes, headlines, captions, music arc"
+          git commit -m "MASTERCLASS CUT: mega pass (grade, room tone, emphasis cuts, 8K insert, held close, XL captions)"
           for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
       - uses: actions/upload-artifact@v4
         with:
