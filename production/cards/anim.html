@@ -72,9 +72,34 @@
   .stars{font-size:54px;color:#00B67A;text-shadow:0 0 18px rgba(0,182,122,.9)}
   .stars .half{opacity:.45}
   .tptxt{font-family:'Inter';font-weight:600;font-size:36px;color:var(--bone);opacity:.9}
+
+  /* 5s OPENER: logo alone in a neon frame, light sweep. No Trustpilot here. */
+  @keyframes frameon{to{opacity:1;transform:scale(1)}}
+  @keyframes neonpulse{from{box-shadow:0 0 34px rgba(99,211,193,.45), inset 0 0 26px rgba(99,211,193,.12), 0 0 80px rgba(0,110,255,.28)}
+                       to{box-shadow:0 0 68px rgba(99,211,193,.85), inset 0 0 40px rgba(99,211,193,.22), 0 0 130px rgba(0,110,255,.5)}}
+  @keyframes sweep{to{left:130%}}
+  @keyframes logoup{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
+  .oframe{position:relative;padding:110px 150px;border-radius:30px;border:2px solid rgba(99,211,193,.9);
+          box-shadow:0 0 34px rgba(99,211,193,.45), inset 0 0 26px rgba(99,211,193,.12), 0 0 80px rgba(0,110,255,.28);
+          opacity:0;transform:scale(.94);
+          animation:frameon 1.0s cubic-bezier(.16,.84,.28,1) .3s forwards, neonpulse 2.0s ease-in-out 1.5s infinite alternate}
+  .v-size .oframe{padding:90px 70px}
+  .ologo{width:980px;max-width:100%;display:block;opacity:0;animation:logoup 1.1s cubic-bezier(.16,.84,.28,1) .75s forwards}
+  .v-size .ologo{width:820px}
+  .oshine{position:absolute;inset:0;border-radius:30px;overflow:hidden;pointer-events:none}
+  .oshine::after{content:"";position:absolute;top:-60%;bottom:-60%;width:220px;left:-360px;transform:rotate(16deg);
+          background:linear-gradient(90deg,transparent,rgba(245,242,234,.16),transparent);
+          animation:sweep 1.5s ease-in-out 2.1s forwards}
 </style>
 </head>
 <body>
+
+<div class="card" id="open">
+  <div class="oframe">
+    <img class="ologo" src="../../assets/lla-logo-transparent@2x.png">
+    <div class="oshine"></div>
+  </div>
+</div>
 
 <div class="card" id="cta1">
   <div class="kick">Longevity Life Academy</div>
