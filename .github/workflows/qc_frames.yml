@@ -1,0 +1,24 @@
+name: QC frames from deliverables
+
+# Registration copy on main — dispatched runs use the file at the dispatched ref.
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: "Deliverable filename (no path)"
+        required: true
+        default: "Courtney_AD90S.mp4"
+      times:
+        description: "Comma-separated timestamps (s)"
+        required: true
+        default: "2.5,7,12,29,40,82,93"
+
+permissions:
+  contents: write
+
+jobs:
+  qc:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Registration stub — dispatch on the feature branch ref."
