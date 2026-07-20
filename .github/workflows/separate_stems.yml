@@ -1,0 +1,127 @@
+name: Separate FA music from French voice (Demucs)
+
+# Splits fa_philippe_clip.mp4 audio into vocals / no_vocals with Demucs (htdemucs),
+# keeps the clean FA music, builds a looped full-length bed, and audits the result
+# by transcribing the music stem (must contain no residual speech).
+# Outputs (committed to branch):
+#   production/music/fa_music_clean.m4a      (music-only, clip length)
+#   production/music/fa_music_bed_long.m4a   (looped ~200s bed, 2s crossfades)
+#   production/music/fa_voice_only.m4a       (the removed French VO, for reference)
+#   production/music/STEM_AUDIT.md
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  separate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install ffmpeg + demucs + faster-whisper
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip3 install --quiet torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip3 install --quiet demucs faster-whisper
+
+      - name: Fetch clip and extract audio
+        run: |
+          set -e
+          TS=$(date +%s)
+          mkdir -p work
+          curl -sL --fail -o work/fa_clip.mp4 \
+            "https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/production/footage/clips/fa_philippe_clip.mp4?nc=${TS}"
+          ls -la work/fa_clip.mp4
+          # must be real media, not an LFS pointer
+          [ "$(stat -c%s work/fa_clip.mp4)" -gt 10000 ] || { echo "LFS pointer, not media"; exit 1; }
+          ffmpeg -y -i work/fa_clip.mp4 -vn -ac 2 -ar 44100 work/fa_audio.wav
+          ffprobe -v error -show_entries format=duration -of csv=p=0 work/fa_audio.wav
+
+      - name: Demucs two-stem separation
+        run: |
+          set -e
+          python3 -m demucs --two-stems=vocals -n htdemucs -o work/sep work/fa_audio.wav
+          ls -la work/sep/htdemucs/fa_audio/
+
+      - name: Build outputs (clean music + long looped bed + voice ref)
+        run: |
+          set -e
+          mkdir -p production/music
+          M=work/sep/htdemucs/fa_audio/no_vocals.wav
+          V=work/sep/htdemucs/fa_audio/vocals.wav
+          # trim first/last 0.25s (separation edge artifacts), gentle fades
+          D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$M")
+          T=$(python3 -c "print(max(1.0, float('$D') - 0.5))")
+          ffmpeg -y -ss 0.25 -t "$T" -i "$M" -af "afade=t=in:d=0.15,afade=t=out:st=$(python3 -c "print(float('$T')-0.15)"):d=0.15" work/music_trim.wav
+          ffmpeg -y -i work/music_trim.wav -c:a aac -b:a 256k production/music/fa_music_clean.m4a
+          ffmpeg -y -i "$V" -c:a aac -b:a 192k production/music/fa_voice_only.m4a
+          # loop into ~200s bed with 2s crossfades (7 copies)
+          ffmpeg -y -i work/music_trim.wav -i work/music_trim.wav -i work/music_trim.wav \
+                 -i work/music_trim.wav -i work/music_trim.wav -i work/music_trim.wav -i work/music_trim.wav \
+            -filter_complex "[0:a][1:a]acrossfade=d=2[a1];[a1][2:a]acrossfade=d=2[a2];[a2][3:a]acrossfade=d=2[a3];[a3][4:a]acrossfade=d=2[a4];[a4][5:a]acrossfade=d=2[a5];[a5][6:a]acrossfade=d=2[a6]" \
+            -map "[a6]" -c:a aac -b:a 256k production/music/fa_music_bed_long.m4a
+          ffprobe -v error -show_entries format=duration -of csv=p=0 production/music/fa_music_bed_long.m4a
+
+      - name: Audit stems (speech must live in vocals, not in music)
+        run: |
+          python3 - <<'PY'
+          from faster_whisper import WhisperModel
+          import subprocess, json
+
+          def loudness(path):
+              r = subprocess.run(["ffmpeg","-i",path,"-af","volumedetect","-f","null","-"],
+                                 capture_output=True, text=True)
+              out = r.stderr
+              mean = [l for l in out.splitlines() if "mean_volume" in l]
+              mx = [l for l in out.splitlines() if "max_volume" in l]
+              return (mean[0].split(":")[1].strip() if mean else "?",
+                      mx[0].split(":")[1].strip() if mx else "?")
+
+          model = WhisperModel("tiny", device="cpu", compute_type="int8")
+          def words(path):
+              segs, _ = model.transcribe(path, language="fr")
+              return " ".join(s.text.strip() for s in segs).strip()
+
+          music_txt = words("production/music/fa_music_clean.m4a")
+          voice_txt = words("production/music/fa_voice_only.m4a")
+          m_mean, m_max = loudness("production/music/fa_music_clean.m4a")
+          v_mean, v_max = loudness("production/music/fa_voice_only.m4a")
+          b_mean, b_max = loudness("production/music/fa_music_bed_long.m4a")
+
+          lines = [
+            "# STEM SEPARATION AUDIT — fa_philippe_clip.mp4",
+            "",
+            "Method: Demucs htdemucs, two-stem (vocals / no_vocals), CPU.",
+            "",
+            "## Levels",
+            f"- fa_music_clean.m4a — mean {m_mean}, max {m_max}",
+            f"- fa_voice_only.m4a — mean {v_mean}, max {v_max}",
+            f"- fa_music_bed_long.m4a — mean {b_mean}, max {b_max}",
+            "",
+            "## Residual-speech check (whisper-tiny fr on each stem)",
+            f"- MUSIC stem transcription: \"{music_txt or '(nothing detected — clean)'}\"",
+            f"- VOICE stem transcription: \"{voice_txt[:400]}\"",
+            "",
+            "PASS criterion: music stem transcription empty or gibberish fragments only;",
+            "voice stem carries the full French VO.",
+          ]
+          open("production/music/STEM_AUDIT.md","w").write("\n".join(lines)+"\n")
+          print("\n".join(lines))
+          PY
+
+      - name: Commit
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add production/music
+          git commit -m "FA music stem-separated from French VO (Demucs) + looped full-length bed + audit"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
