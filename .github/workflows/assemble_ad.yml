@@ -30,7 +30,7 @@ jobs:
           TS=$(date +%s)
           M="https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}"
           curl -sL --fail "$M/deliverables/Courtney_BGSWAP_0717.mp4?nc=$TS" -o work/base.mp4
-          for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol site_mental site_wearables food_flatlay swimmer_dawn; do
+          for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol site_mental site_wearables food_flatlay swimmer_dawn oximeter_data; do
             curl -sL --fail "$M/production/footage/clips/$c.mp4" -o "work/$c.mp4"
           done
           # brand fonts for captions + headlines
@@ -87,9 +87,9 @@ jobs:
               if not sel: return [(ss, ee)]
               ranges, cs = [], ss
               for a, b in zip(sel, sel[1:]):
-                  if b["start"] - a["end"] > 0.55:
-                      ranges.append((cs, min(a["end"] + 0.18, ee)))
-                      cs = max(b["start"] - 0.15, ss)
+                  if b["start"] - a["end"] > 0.40:
+                      ranges.append((cs, min(a["end"] + 0.14, ee)))
+                      cs = max(b["start"] - 0.12, ss)
               ranges.append((cs, ee))
               return [(s0, s1) for s0, s1 in ranges if s1 - s0 > 0.2]
 
@@ -117,7 +117,7 @@ jobs:
               # b-roll visual + HER AUDIO underneath (audio from base at a_ss+a_dur_off, sped RATE)
               subprocess.run([FF,"-y","-stream_loop","-1","-t",str(eff),"-i",f"work/{clip}.mp4",
                 "-ss",str(a_ss+a_dur_off),"-t",str(dur),"-i","work/base.mp4",
-                "-map","0:v","-map","1:a","-vf",f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},unsharp=5:5:0.4,curves=preset=medium_contrast,colorbalance=rh=.05:gh=.02:bh=-.05:bs=-.05:rs=.02,eq=saturation=0.94:contrast=1.05{lift},vignette=PI/4.5,noise=alls=7:allf=t+u",
+                "-map","0:v","-map","1:a","-vf",f"scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H},fps={FPS},cas=0.45,unsharp=5:5:0.5,curves=preset=medium_contrast,colorbalance=rh=.05:gh=.02:bh=-.05:bs=-.05:rs=.02,eq=saturation=0.94:contrast=1.05{lift},vignette=PI/4.5,noise=alls=7:allf=t+u",
                 "-af",f"atempo={RATE}",
                 "-c:v","libx264","-crf","17","-preset","fast","-c:a","aac","-ar","48000","-ac","2",
                 f"seg/{idx:02d}.mp4"],check=True)
@@ -162,10 +162,12 @@ jobs:
           cardseg(nx(), "production/cards/png/horizontal/cta1_h.png", 2.8)
           # B · NOT YOUR FAULT (74.28-102.8, full incl. furniture line)
           her(nx(), 74.28, 7.88)                                  # "why it never stuck...whole picture"
-          broll(nx(), "site_mental", 5.56, 74.28, 7.88)           # "fragments, one gadget at a time"
+          broll(nx(), "oximeter_data", 2.6, 74.28, 7.88)          # "fragments, one gadget at a time" - AN ACTUAL GADGET
+          her(nx(), 84.76, 2.96)                                  # back on her - rhythm cut
           her(nx(), 87.72, 6.28)                                  # furniture + "didn't lack willpower"
           her(nx(), 94.0, 2.68)                                   # "you lacked a clear path"
-          broll(nx(), "path_dawn", 6.12, 94.0, 2.68)              # "one you could truly follow...taught"
+          broll(nx(), "path_dawn", 3.2, 94.0, 2.68)               # "one you could truly follow"
+          her(nx(), 99.88, 2.92)                                  # "that path can be taught" - HER FACE, teaching
           cardseg(nx(), "production/cards/png/horizontal/cta2_h.png", 2.8)
           # C · SIX PILLARS (127.34-161.8, take 2 full; singles land on her words)
           her(nx(), 127.34, 7.74)                                 # "whole path...real curriculum"
@@ -185,13 +187,13 @@ jobs:
           mark("harvard0")
           her(nx(), 174.16, 9.12)                                 # "five habits...14 extra years" - HER FACE
           mark("harvard1")
-          broll(nx(), "food_flatlay", 2.72, 174.16, 9.12)         # "science did the hard part"
+          her(nx(), 183.28, 2.72)                                 # "science did the hard part" - stays on her, conviction
           her(nx(), 186.0, 4.76)                                  # "our whole job is to teach you"
           # E · OFFER (195.36-222.16 full)
           her(nx(), 195.36, 9.56)                                 # "That's exactly what LLA is..."
           broll(nx(), "site_ctabg", 3.12, 195.36, 9.56)           # "18 live sessions raise your hand"
           her(nx(), 208.04, 4.92)                                 # "real coaching meets you where you are"
-          broll(nx(), "swimmer_dawn", 3.44, 208.04, 4.92)         # "your own numbers turned into"
+          broll(nx(), "site_wearables", 3.44, 208.04, 4.92)       # "your own numbers turned into" - NUMBERS ON A WRIST
           her(nx(), 216.4, 5.76)                                  # "a personal protocol...walks the path with you"
           cardseg(nx(), "production/cards/png/horizontal/cta3_h.png", 2.8)
           # F · CLOSE (take 4 full 378.48-402.32)
@@ -260,11 +262,11 @@ jobs:
               return fname
 
           HEADS = [([2],"THE PROBLEM","The noise ends here."),
-                   ([11,13],"THE TRUTH","It was never your fault."),
-                   ([17,18],"THE METHOD","Six pillars. One path."),
-                   ([28,30],"THE PROOF","Harvard. 14 more healthy years."),
-                   ([33],"THE ACADEMY","18 live sessions. Real coaching."),
-                   ([39,40,41],"ENROLL NOW","Class is in session.")]
+                   ([11,14],"THE TRUTH","It was never your fault."),
+                   ([19,20],"THE METHOD","Six pillars. One path."),
+                   ([30,32],"THE PROOF","Harvard. 14 more healthy years."),
+                   ([35],"THE ACADEMY","18 live sessions. Real coaching."),
+                   ([41,42,43],"ENROLL NOW","Class is in session.")]
           def head_filters(seglist, starts_list):
               fs = []
               for cands,kick,text in HEADS:
@@ -413,11 +415,11 @@ jobs:
           # pillars run -> 18 lessons -> blueprint -> Harvard 14yrs -> LLA offer
           # "raise your hand" -> offer card -> class in session -> I'm Courtney -> outro
           # (all indices +1: seg 1 is now the 5s opener, included in every cut)
-          S90 = [1, 2,3,4,5,6,7,8, 10, 13,14, 16, 18,19,20,21,22,23,24, 26,27, 30, 33,34, 38, 40,41, 42]
+          S90 = [1, 2,3,4,5,6,7,8, 10, 14,15, 18, 20,21,22,23,24,25,26, 28,29, 32, 35,36, 40, 42,43, 44]
           T90, cards90 = mixcut("Courtney_AD90S.mp4", S90, "AD90S")
 
           # FA-length cut (~55s): tightest spine
-          FA = [1, 2,3,4,5,6,7,8, 10, 18,19,20,21,22,23,24, 30, 38, 41, 42]
+          FA = [1, 2,3,4,5,6,7,8, 10, 20,21,22,23,24,25,26, 32, 40, 43, 44]
           TFA, cardsFA = mixcut("Courtney_AD55_FA.mp4", FA, "AD55")
 
           with open("EDIT_AUDIT.md","a") as f:
