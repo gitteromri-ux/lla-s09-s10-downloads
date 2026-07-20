@@ -1,0 +1,75 @@
+name: Final pass (brand opener + FA b-roll cutaways)
+
+# Overlays the brand open card at t=0 and five 2.5s FA-style b-roll cutaways
+# (audio continuous) onto the published film. Video-only edit; audio copied.
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_name:
+        description: "Deliverable basename (no extension)"
+        required: false
+        default: "Courtney_CINEMA_FINAL_0717"
+
+permissions:
+  contents: write
+
+jobs:
+  finalpass:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Overlay opener + b-roll
+        env:
+          OUT: ${{ github.event.inputs.video_name }}
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          M="https://media.githubusercontent.com/media/${{ github.repository }}"
+          A="$M/claude/video-0717-background-replace-qm11te/production"
+          curl -sS -L --fail --retry 4 "$M/main/deliverables/${OUT}.mp4" -o in.mp4
+          curl -sS -L --fail --retry 4 "$A/cards/anim/end_h.mp4" -o opener.mp4
+          i=0
+          for c in capsules_macro site_yoga site_sleep data_curve swimmer_dawn; do
+            curl -sS -L --fail --retry 4 "$A/footage/clips/$c.mp4" -o "raw_$i.mp4"
+            ffmpeg -y -loglevel error -stream_loop -1 -t 2.5 -i "raw_$i.mp4" \
+              -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=30" \
+              -c:v libx264 -crf 17 -preset fast -pix_fmt yuv420p -an "b_$i.mp4"
+            i=$((i+1))
+          done
+          ffmpeg -y -loglevel error -i in.mp4 \
+            -i opener.mp4 \
+            -itsoffset 45  -i b_0.mp4 \
+            -itsoffset 150 -i b_1.mp4 \
+            -itsoffset 255 -i b_2.mp4 \
+            -itsoffset 300 -i b_3.mp4 \
+            -itsoffset 375 -i b_4.mp4 \
+            -filter_complex "[0:v][1:v]overlay=eof_action=pass[v1];[v1][2:v]overlay=eof_action=pass[v2];[v2][3:v]overlay=eof_action=pass[v3];[v3][4:v]overlay=eof_action=pass[v4];[v4][5:v]overlay=eof_action=pass[v5];[v5][6:v]overlay=eof_action=pass[vout]" \
+            -map "[vout]" -map 0:a -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p \
+            -c:a copy -movflags +faststart "out_${OUT}.mp4"
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "out_${OUT}.mp4"
+          mkdir -p deliverables/qc_cinema
+          for p in 1 46 151 256 301 376 91 211 331 403; do
+            ffmpeg -y -loglevel error -ss "$p" -i "out_${OUT}.mp4" -frames:v 1 "deliverables/qc_cinema/fp_${p}.jpg" || true
+          done
+      - name: Commit back to page
+        env:
+          OUT: ${{ github.event.inputs.video_name }}
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp "out_${OUT}.mp4" "deliverables/${OUT}.mp4"
+          git add .gitattributes "deliverables/${OUT}.mp4" deliverables/qc_cinema
+          git commit -m "CINEMA FINAL: brand opener + FA b-roll cutaways"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.video_name }}_finalpass
+          path: out_*.mp4
+          if-no-files-found: error
