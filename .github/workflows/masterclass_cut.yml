@@ -56,18 +56,25 @@ jobs:
           os.makedirs("seg", exist_ok=True)
           TIGHT="crop=1454:818:(iw-1454)/2:(ih-818)*0.30,scale=1920:1080:flags=lanczos,"
           ACTS=[
-            dict(name="hook",   s=39.60, e=70.60, head="THE DIRECT PATH TO LONGEVITY",
+            dict(name="hook",   s=39.60, e=70.60,
+                 heads=[(44.90,"LONGEVITY ADVICE IS EVERYWHERE."),
+                        (58.74,"THE DIRECT PATH TO LONGEVITY")],
                  broll=[("noise_screens",44.90,5.60),("site_yoga",53.90,3.40)]),
-            dict(name="why",    s=73.90, e=101.60, head="IT WASN'T YOUR FAULT", broll=[]),
-            dict(name="pillars",s=127.40,e=160.70, head="SIX PILLARS · ONE CURRICULUM",
+            dict(name="why",    s=73.90, e=101.60,
+                 heads=[(74.02,"WHY LONGEVITY NEVER STUCK FOR YOU")], broll=[]),
+            dict(name="pillars",s=127.40,e=160.70,
+                 heads=[(127.50,"LONGEVITY IN SIX PILLARS · ONE CURRICULUM")],
                  broll=[("site_nutrition",137.10,1.90),("site_sleep",139.00,1.80),
                         ("swimmer_dawn",140.80,1.80),("site_supplements",142.60,1.90),
                         ("site_wearables",144.50,1.70)]),
-            dict(name="proof",  s=165.40,e=189.80, head="+14 YEARS · PROVEN",
+            dict(name="proof",  s=165.40,e=189.80,
+                 heads=[(171.00,"+14 YEARS OF LIFE · HARVARD-BACKED")],
                  broll=[("data_curve",171.20,5.00)]),
-            dict(name="academy",s=195.80,e=221.00, head="18 LIVE SESSIONS · REAL COACHING",
+            dict(name="academy",s=195.80,e=221.00,
+                 heads=[(195.94,"LONGEVITY LIFE ACADEMY · 18 LIVE SESSIONS")],
                  broll=[("site_protocol",213.40,4.60)]),
-            dict(name="close",  s=377.50,e=401.90, head="CLASS IS IN SESSION", broll=[]),
+            dict(name="close",  s=377.50,e=401.90,
+                 heads=[(377.60,"YOUR LONGEVITY CLASS IS IN SESSION")], broll=[]),
           ]
           CARDS_AFTER={"pillars":"cta1","proof":"cta2","academy":"cta3"}
           gaps=[]
@@ -104,7 +111,8 @@ jobs:
           enc_card("end.png",2.2); out_t+=2.2
           for act in ACTS:
               music_marks[act["name"]]=out_t
-              heads.append((out_t+0.15, act["head"]))
+              for ht,txt in act["heads"]:
+                  heads.append((out_t + max(0.15, ht-act["s"]), txt))
               act_map.append((act["s"],act["e"],out_t))
               cur=act["s"]; tight=False
               events=sorted(act["broll"], key=lambda b:b[1])
@@ -155,7 +163,7 @@ jobs:
               cap=txt[0].upper()+txt[1:] if txt and txt[0].isalpha() else txt
               ass+=f"Dialogue: 0,{ts(st)},{ts(max(en,st+0.7))},Cap,,0,0,0,,{cap}\n"
           for ht,txt in heads:
-              ass+=f"Dialogue: 1,{ts(ht)},{ts(ht+2.6)},Head,,0,0,0,,{{\\fad(250,250)}}{txt}\n"
+              ass+=f"Dialogue: 1,{ts(ht)},{ts(ht+3.0)},Head,,0,0,0,,{{\\fad(250,250)}}{txt}\n"
           open("caps.ass","w").write(ass)
           json.dump(music_marks, open("marks.json","w"))
           print("segments:",idx,"out:",round(out_t,1),"caps:",len(lines))
