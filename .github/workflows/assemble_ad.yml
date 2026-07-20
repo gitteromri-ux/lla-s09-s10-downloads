@@ -26,13 +26,16 @@ jobs:
       - name: Get materials
         run: |
           set -e
-          mkdir -p work
+          mkdir -p work fonts
+          TS=$(date +%s)
           M="https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}"
           curl -sL --fail "$M/deliverables/Courtney_BGSWAP_0717.mp4?nc=$TS" -o work/base.mp4
           for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol site_mental site_wearables food_flatlay swimmer_dawn; do
             curl -sL --fail "$M/production/footage/clips/$c.mp4" -o "work/$c.mp4"
           done
-          TS=$(date +%s)
+          # brand fonts for captions + headlines
+          curl -sL --fail -o fonts/Fraunces.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
+          curl -sL --fail -o fonts/Inter.ttf "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
           for c in open cta1 cta2 cta3 outro; do
             curl -sL --fail "$M/production/cards/anim/${c}_h.mp4?nc=$TS" -o "work/anim_${c}_h.mp4"
           done
@@ -61,24 +64,55 @@ jobs:
           set -e
           python3 - <<'PY'
           import subprocess, os
+          import json as _j
           FF = "ffmpeg"
           W,H,FPS = 1920,1080,30
           RATE = 1.08   # global pace-up: every word kept, whole film 8% brisker
           # clips that render dark/moody get a lift so lighting reads consistent
           DARK = {"noise_scroll","noise_off","seat_light","capsules_macro","doors_light","oximeter_data"}
           os.makedirs("seg", exist_ok=True)
+          FRA, INT = "fonts/Fraunces.ttf", "fonts/Inter.ttf"
+
+          # sentence-level transcript drives the pause razor + captions
+          _tr = _j.load(open("analysis/courtney_transcript.json"))
+          TSEG = _tr if isinstance(_tr, list) else _tr.get("segments", [])
+          TSEG = sorted([t for t in TSEG if t.get("text","").strip()], key=lambda s: s["start"])
+          SRCMAP = {}   # seg idx -> list of (source_start, source_dur) razored sub-ranges
+
+          HERVF = f"scale={W}:{H},fps={FPS},colorbalance=rh=.04:gh=.02:bs=-.04,eq=contrast=1.06:saturation=1.02,vignette=PI/5,noise=alls=4:allf=t+u,setpts=PTS/{RATE}"
+
+          def sent_ranges(ss, ee):
+              # razor internal thinking-pauses > 0.55s, keep 0.18s handles
+              sel = [t for t in TSEG if t["end"] > ss + 0.05 and t["start"] < ee - 0.05]
+              if not sel: return [(ss, ee)]
+              ranges, cs = [], ss
+              for a, b in zip(sel, sel[1:]):
+                  if b["start"] - a["end"] > 0.55:
+                      ranges.append((cs, min(a["end"] + 0.18, ee)))
+                      cs = max(b["start"] - 0.15, ss)
+              ranges.append((cs, ee))
+              return [(s0, s1) for s0, s1 in ranges if s1 - s0 > 0.2]
 
           def her(idx, ss, dur):
-              TL.append(round(dur/RATE, 4))
-              # her video+audio segment from base, sped RATE (pitch preserved)
-              subprocess.run([FF,"-y","-ss",str(ss),"-t",str(dur),"-i","work/base.mp4",
-                "-vf",f"scale={W}:{H},fps={FPS},colorbalance=rh=.04:gh=.02:bs=-.04,eq=contrast=1.06:saturation=1.02,vignette=PI/5,noise=alls=4:allf=t+u,setpts=PTS/{RATE}",
-                "-af",f"atempo={RATE}","-c:v","libx264","-crf","17","-preset","fast",
-                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:02d}.mp4"],check=True)
+              subs = sent_ranges(ss, ss + dur)
+              parts = []
+              for j,(s0,s1) in enumerate(subs):
+                  p = f"seg/{idx:02d}_{j}.mp4"
+                  subprocess.run([FF,"-y","-ss",f"{s0:.3f}","-t",f"{s1-s0:.3f}","-i","work/base.mp4",
+                    "-vf",HERVF,"-af",f"atempo={RATE}","-c:v","libx264","-crf","17","-preset","fast",
+                    "-c:a","aac","-ar","48000","-ac","2",p],check=True)
+                  parts.append((p,s0,s1))
+              with open(f"seg/{idx:02d}.txt","w") as f:
+                  for p,_,_ in parts: f.write(f"file '{p.split('/')[-1]}'\n")
+              subprocess.run([FF,"-y","-f","concat","-safe","0","-i",f"seg/{idx:02d}.txt",
+                  "-c","copy",f"seg/{idx:02d}.mp4"],check=True)
+              TL.append(round(sum(s1-s0 for _,s0,s1 in parts)/RATE, 4))
+              SRCMAP[idx] = [(s0, s1-s0) for _,s0,s1 in parts]
 
           def broll(idx, clip, dur, a_ss, a_dur_off):
               eff = round(dur/RATE, 4)
               TL.append(eff)
+              SRCMAP[idx] = [(a_ss+a_dur_off, dur)]
               lift = ",eq=gamma=1.30:brightness=0.06" if clip in DARK else ""
               # b-roll visual + HER AUDIO underneath (audio from base at a_ss+a_dur_off, sped RATE)
               subprocess.run([FF,"-y","-stream_loop","-1","-t",str(eff),"-i",f"work/{clip}.mp4",
@@ -189,6 +223,63 @@ jobs:
           print("card times:", card_ts, "total:", T)
           fades = f"fade=t=in:st=0:d=0.5,fade=t=out:st={T-0.8:.2f}:d=0.8"
           import os as _os
+
+          # ===== LARGE CAPTIONS (.ass, brand-styled) + MASTERCLASS HEADLINES =====
+          def a_time(t):
+              return f"{int(t//3600)}:{int(t%3600//60):02d}:{t%60:05.2f}"
+          def make_ass(fname, seglist, starts_list):
+              ev = []
+              for pos,k in enumerate(seglist):
+                  out0 = starts_list[pos]; acc = 0.0
+                  for (a0,d) in SRCMAP.get(k, []):
+                      a1 = a0 + d
+                      for t in TSEG:
+                          if t["end"] <= a0+0.03 or t["start"] >= a1-0.03: continue
+                          st = out0 + acc + max(0.0, t["start"]-a0)/RATE
+                          en = out0 + acc + min(d, t["end"]-a0)/RATE
+                          txt = t["text"].strip()
+                          for pre in ("Okay. So ","Okay. ","Okay, ","Okay so "):
+                              if txt.startswith(pre): txt = txt[len(pre):]; break
+                          if txt.lower().rstrip(".") == "okay" or not txt: continue
+                          txt = txt[0].upper() + txt[1:]
+                          if en-st > 0.25: ev.append([st,min(en,st+6.0),txt])
+                      acc += d/RATE
+              ev.sort()
+              merged = []
+              for st,en,tx in ev:
+                  if merged and merged[-1][2]==tx and st-merged[-1][1] < 0.4: merged[-1][1]=en
+                  else: merged.append([st,en,tx])
+              with open(fname,"w") as f:
+                  f.write("[Script Info]\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n")
+                  f.write("[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
+                  f.write("Style: Cap,Inter,60,&H00FFFFFF,&H00FFFFFF,&H00481F0E,&H96000000,-1,0,0,0,100,100,0,0,1,3,1,2,90,90,84,1\n\n")
+                  f.write("[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+                  for st,en,tx in merged:
+                      tx = tx.replace("{","(").replace("}",")")
+                      f.write(f"Dialogue: 0,{a_time(st)},{a_time(en)},Cap,,0,0,0,,{tx}\n")
+              return fname
+
+          HEADS = [([2],"THE PROBLEM","The noise ends here."),
+                   ([11,13],"THE TRUTH","It was never your fault."),
+                   ([17,18],"THE METHOD","Six pillars. One path."),
+                   ([28,30],"THE PROOF","Harvard. 14 more healthy years."),
+                   ([33],"THE ACADEMY","18 live sessions. Real coaching."),
+                   ([39,40,41],"ENROLL NOW","Class is in session.")]
+          def head_filters(seglist, starts_list):
+              fs = []
+              for cands,kick,text in HEADS:
+                  seg = next((c for c in cands if c in seglist), None)
+                  if seg is None: continue
+                  t0 = starts_list[seglist.index(seg)] + 0.2; t1 = t0 + 2.7
+                  al = f"if(lt(t,{t0+0.35:.2f}),(t-{t0:.2f})/0.35,if(gt(t,{t1-0.35:.2f}),({t1:.2f}-t)/0.35,1))"
+                  en = f"between(t,{t0:.2f},{t1:.2f})"
+                  fs.append(f"drawtext=fontfile={INT}:text='{kick}':fontcolor=0x63D3C1:fontsize=34:x=(w-text_w)/2:y=h-388:alpha='{al}':enable='{en}':shadowcolor=black@0.6:shadowx=2:shadowy=2")
+                  fs.append(f"drawtext=fontfile={FRA}:text='{text}':fontcolor=0xF5F2EA:fontsize=94:x=(w-text_w)/2:y=h-344:alpha='{al}':enable='{en}':shadowcolor=black@0.7:shadowx=3:shadowy=3")
+              return fs
+
+          ALLSEGS = list(range(1, i+1))
+          mcap = make_ass("cap_master.ass", ALLSEGS, starts)
+          vchain = ",".join(head_filters(ALLSEGS, starts) + [f"subtitles={mcap}:fontsdir=fonts", fades])
           BED = "work/fa_bed.m4a" if _os.path.exists("work/fa_bed.m4a") else "work/bed.mp3"
           if _os.path.exists(BED):
               # opener card sits at t=0: music-forward there, settles when she speaks
@@ -205,8 +296,8 @@ jobs:
                       (c2-0.6,0.32),(c2,0.58),(c2+2.4,0.58),(c2+3.0,0.26),       # blueprint card swell
                       (h0-0.3,0.26),(h0+0.4,0.12),(h1-0.2,0.12),(h1+0.8,0.28),   # Harvard number lands drier
                       (c3-1.6,0.22),(c3-1.1,0.04),(c3-0.05,0.04),(c3,0.62),(c3+2.6,0.62),  # offer silence -> hit
-                      (cl-0.3,0.28),(cl,0.38),                                    # "Class is in session" lift
-                      (c4-0.5,0.36),(c4,0.62),(T,0.62)]
+                      (cl-0.3,0.28),(cl,0.42),                                    # "Class is in session" lift
+                      (c4-4.5,0.46),(c4-0.4,0.58),(c4,0.74),(T,0.74)]             # FINAL CULMINATION: builds through the close, peaks on outro
               expr = f"{keys[-1][1]:.3f}"
               for (t0,v0),(t1,v1) in reversed(list(zip(keys, keys[1:]))):
                   seg_expr = f"({v0:.3f}+({v1:.3f}-{v0:.3f})*(t-{t0:.2f})/{max(t1-t0,0.01):.2f})"
@@ -214,20 +305,21 @@ jobs:
               env = f"volume='{expr}':eval=frame"
               sting = _os.path.exists("work/fa_sting.m4a")
               if sting:
-                  d1,d2,d3 = int(c1*1000),int(c2*1000),int(c3*1000)
+                  d1,d2,d3,d4 = int(c1*1000),int(c2*1000),int(c3*1000),int(c4*1000)
                   fc = (f"[1:a]silenceremove=start_periods=1:start_threshold=-40dB,aloop=loop=-1:size=2e9,atrim=0:{T:.2f},{env},afade=t=out:st={T-1.2:.2f}:d=1.2[m];"
-                        f"[2:a]asplit=3[s1][s2][s3];"
+                        f"[2:a]asplit=4[s1][s2][s3][s4];"
                         f"[s1]adelay={d1}|{d1},volume=0.5[st1];"
                         f"[s2]adelay={d2}|{d2},volume=0.5[st2];"
                         f"[s3]adelay={d3}|{d3},volume=0.6[st3];"
-                        f"[m][st1][st2][st3]amix=inputs=4:duration=first:normalize=0[mm];"
+                        f"[s4]adelay={d4}|{d4},volume=0.7[st4];"
+                        f"[m][st1][st2][st3][st4]amix=inputs=5:duration=first:normalize=0[mm];"
                         f"[0:a][mm]amix=inputs=2:duration=first:normalize=0[aout];"
-                        f"[0:v]{fades}[vout]")
+                        f"[0:v]{vchain}[vout]")
                   inputs = [FF,"-y","-i","cut.mp4","-i",BED,"-i","work/fa_sting.m4a"]
               else:
                   fc = (f"[1:a]silenceremove=start_periods=1:start_threshold=-40dB,aloop=loop=-1:size=2e9,atrim=0:{T:.2f},{env},afade=t=out:st={T-1.2:.2f}:d=1.2[m];"
                         f"[0:a][m]amix=inputs=2:duration=first:normalize=0[aout];"
-                        f"[0:v]{fades}[vout]")
+                        f"[0:v]{vchain}[vout]")
                   inputs = [FF,"-y","-i","cut.mp4","-i",BED]
               subprocess.run(inputs + [
                   "-filter_complex",fc,"-map","[vout]","-map","[aout]",
@@ -235,7 +327,7 @@ jobs:
                   "-c:a","aac","-b:a","256k","-movflags","+faststart",
                   "Courtney_AD90_FINAL.mp4"],check=True)
           else:
-              subprocess.run([FF,"-y","-i","cut.mp4","-vf",fades,
+              subprocess.run([FF,"-y","-i","cut.mp4","-vf",vchain,
                   "-c:v","libx264","-crf","17","-preset","medium",
                   "-c:a","copy","-movflags","+faststart","Courtney_AD90_FINAL.mp4"],check=True)
           subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size",
@@ -264,8 +356,13 @@ jobs:
               for d in cdur: cstarts.append(cacc); cacc += d
               cards = [cstarts[j] for j,k in enumerate(seglist) if k in CARD_IDX]
               print(label, "runtime:", CT, "cards:", cards)
+              # per-cut captions + headlines
+              ccap = make_ass(f"{outname}.ass", seglist, cstarts)
+              cfades = f"fade=t=in:st=0:d=0.4,fade=t=out:st={CT-0.7:.2f}:d=0.7"
+              cvchain = ",".join(head_filters(seglist, cstarts) + [f"subtitles={ccap}:fontsdir=fonts", cfades])
               if not _os.path.exists(BED):
-                  subprocess.run([FF,"-y","-i",rawname,"-c","copy",outname],check=True)
+                  subprocess.run([FF,"-y","-i",rawname,"-vf",cvchain,"-c:v","libx264","-crf","17",
+                      "-preset","medium","-pix_fmt","yuv420p","-c:a","copy",outname],check=True)
                   return CT, cards
               # envelope: present from frame one; swell on each card;
               # silence->hit on the offer card (last 2.8s card); outro rides out
@@ -280,7 +377,7 @@ jobs:
               if offer_c is not None:
                   fk += [(offer_c-1.2,0.30),(offer_c-0.7,0.04),(offer_c-0.05,0.04),
                          (offer_c,0.64),(offer_c+2.4,0.64),(offer_c+2.9,0.34)]
-              fk += [(outro_c-0.5,0.42),(outro_c,0.64),(CT,0.64)]
+              fk += [(outro_c-4.5,0.46),(outro_c-0.4,0.58),(outro_c,0.74),(CT,0.74)]   # final culmination
               fk = sorted(set(fk), key=lambda x: x[0])
               fk = [k for j,k in enumerate(fk) if j==0 or k[0] > fk[j-1][0] + 0.02]
               fexpr = f"{fk[-1][1]:.3f}"
@@ -288,22 +385,21 @@ jobs:
                   se = f"({v0:.3f}+({v1:.3f}-{v0:.3f})*(t-{t0:.2f})/{max(t1-t0,0.01):.2f})"
                   fexpr = f"if(lt(t,{t1:.2f}),{se},{fexpr})"
               fenv = f"volume='{fexpr}':eval=frame"
-              ffades = f"fade=t=in:st=0:d=0.4,fade=t=out:st={CT-0.7:.2f}:d=0.7"
-              stc = [c for c in body if c != outro_c][:3]
+              stc = [c for c in body if c != outro_c][:3] + ([outro_c] if body else [])
               if _os.path.exists("work/fa_sting.m4a") and stc:
                   splits = "".join(f"[s{j}]" for j in range(len(stc)))
                   ffc = (f"[1:a]silenceremove=start_periods=1:start_threshold=-40dB,aloop=loop=-1:size=2e9,atrim=0:{CT:.2f},{fenv},afade=t=out:st={CT-1.0:.2f}:d=1.0[m];"
                          f"[2:a]asplit={len(stc)}{splits};")
                   for j,c in enumerate(stc):
-                      dd = int(c*1000); vv = 0.6 if c == offer_c else 0.5
+                      dd = int(c*1000); vv = 0.7 if c == outro_c else (0.6 if c == offer_c else 0.5)
                       ffc += f"[s{j}]adelay={dd}|{dd},volume={vv}[st{j}];"
                   ffc += (f"[m]{''.join(f'[st{j}]' for j in range(len(stc)))}amix=inputs={len(stc)+1}:duration=first:normalize=0[mm];"
                           f"[0:a][mm]amix=inputs=2:duration=first:normalize=0[aout];"
-                          f"[0:v]{ffades}[vout]")
+                          f"[0:v]{cvchain}[vout]")
                   fin = [FF,"-y","-i",rawname,"-i",BED,"-i","work/fa_sting.m4a"]
               else:
                   ffc = (f"[1:a]silenceremove=start_periods=1:start_threshold=-40dB,aloop=loop=-1:size=2e9,atrim=0:{CT:.2f},{fenv},afade=t=out:st={CT-1.0:.2f}:d=1.0[m];"
-                         f"[0:a][m]amix=inputs=2:duration=first:normalize=0[aout];[0:v]{ffades}[vout]")
+                         f"[0:a][m]amix=inputs=2:duration=first:normalize=0[aout];[0:v]{cvchain}[vout]")
                   fin = [FF,"-y","-i",rawname,"-i",BED]
               subprocess.run(fin + ["-filter_complex",ffc,"-map","[vout]","-map","[aout]",
                   "-c:v","libx264","-crf","17","-preset","medium","-pix_fmt","yuv420p",
