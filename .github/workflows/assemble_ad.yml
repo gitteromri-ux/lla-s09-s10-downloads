@@ -32,8 +32,9 @@ jobs:
           for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol site_mental site_wearables food_flatlay swimmer_dawn; do
             curl -sL --fail "$M/production/footage/clips/$c.mp4" -o "work/$c.mp4"
           done
+          TS=$(date +%s)
           for c in cta1 cta2 cta3 outro; do
-            curl -sL --fail "$M/production/cards/anim/${c}_h.mp4" -o "work/anim_${c}_h.mp4"
+            curl -sL --fail "$M/production/cards/anim/${c}_h.mp4?nc=$TS" -o "work/anim_${c}_h.mp4"
           done
           curl -sL --fail "$M/production/music/fa_sting.m4a" -o work/fa_sting.m4a || true
           for u in "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Meditation%20Impromptu%2002.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Heart%20of%20Nowhere.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Almost%20in%20F.mp3"; do
