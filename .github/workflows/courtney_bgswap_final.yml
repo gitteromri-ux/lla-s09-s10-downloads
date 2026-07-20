@@ -35,9 +35,14 @@ on:
         description: "Direct/WeTransfer URL of the source (takes precedence over drive_id)"
         required: false
         default: ""
+      source_artifact_run_id:
+        description: "Run id whose source-0717 artifact holds the source video (takes precedence over URLs)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
+  actions: read
 
 env:
   ZIP_URL: "https://drive.usercontent.google.com/download?id=${{ github.event.inputs.drive_id }}&export=download&confirm=t"
@@ -51,6 +56,14 @@ jobs:
       matrix: ${{ steps.mk.outputs.matrix }}
       total: ${{ steps.mk.outputs.total }}
     steps:
+      - name: Get source from previous run artifact
+        if: ${{ github.event.inputs.source_artifact_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: source-0717
+          path: srcvid_prev
+          run-id: ${{ github.event.inputs.source_artifact_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Probe source duration
         id: mk
         run: |
@@ -58,6 +71,12 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip python3-pip
           SRC_URL='${{ github.event.inputs.source_url }}'
           mkdir -p src srcvid
+          if [ -d srcvid_prev ] && [ -n "$(ls -A srcvid_prev 2>/dev/null)" ]; then
+            echo "Using source-0717 artifact from run ${{ github.event.inputs.source_artifact_run_id }}"
+            cp srcvid_prev/* srcvid/
+            touch /tmp/src_ready
+          fi
+          if [ ! -f /tmp/src_ready ]; then
           if [ -n "$SRC_URL" ]; then
             echo "Using direct source URL"
             case "$SRC_URL" in
@@ -96,6 +115,9 @@ jobs:
           VID=$(find src -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.bin' \) | sort -k1 | head -1)
           ffprobe -v error -show_entries stream=codec_type -of csv=p=0 "$VID" | grep -q video || { echo "FATAL: downloaded file is not a video"; exit 9; }
           cp "$VID" "srcvid/source$(echo "$VID" | grep -oE '\.[a-zA-Z0-9]+$')"
+          fi
+          VID=$(find srcvid -type f | head -1)
+          ffprobe -v error -show_entries stream=codec_type -of csv=p=0 "$VID" | grep -q video || { echo "FATAL: source is not a video"; exit 9; }
           D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$VID")
           python3 - "$D" <<'PY'
           import sys, json, os
@@ -249,10 +271,9 @@ jobs:
               layer = Image.new("RGBA",(OW,OH),(0,0,0,0))
               layer.paste(cut_s, (px, py), cut_s)
 
-              sa = layer.split()[3].filter(ImageFilter.GaussianBlur(18)).point(lambda v: int(v*0.25))
-              shadow = Image.new("RGBA",(OW,OH),(0,0,0,0)); shadow.putalpha(sa)
-              comp = Image.alpha_composite(bg.copy(), shadow)
-              comp = Image.alpha_composite(comp, layer).convert("RGB")
+              # NO synthetic silhouette shadow — client flagged it as a visible
+              # dark halo on her shoulders. Clean composite only.
+              comp = Image.alpha_composite(bg.copy(), layer).convert("RGB")
 
               ar = np.asarray(comp).astype(np.float32)
               ar += np.random.normal(0, 2.0, ar.shape)
