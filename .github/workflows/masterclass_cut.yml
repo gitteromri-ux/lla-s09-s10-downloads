@@ -29,10 +29,14 @@ jobs:
       - name: Setup
         run: |
           set -e
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs fonts-inter
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          pip3 install --quiet fonttools
           cp art/Courtney_CINEMA_FINAL_0717.mp4 base.mp4
           mkdir -p fonts
-          curl -sL --fail -o fonts/Fraunces.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
+          curl -sL --fail -o Fraunces_var.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
+          curl -sL --fail -o Inter_var.ttf "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
+          fonttools varLib.instancer -q -o fonts/Inter-SemiBold.ttf Inter_var.ttf wght=600 opsz=28
+          fonttools varLib.instancer -q -o fonts/Fraunces-Display.ttf Fraunces_var.ttf wght=480 opsz=144 SOFT=0 WONK=0
           A="https://media.githubusercontent.com/media/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
           R="https://raw.githubusercontent.com/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
           for c in cta1 cta2 cta3 end; do
@@ -104,7 +108,7 @@ jobs:
               global idx; idx+=1
               subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i",png,
                 "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
-                "-vf",f"scale={W}:{H},fps={FPS},fade=t=in:d=0.3,fade=t=out:st={dur-0.3}:d=0.3",
+                "-vf",f"scale={W}:{H},fps={FPS},fade=t=in:d=0.45,fade=t=out:st={dur-0.45}:d=0.45",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-shortest",f"seg/{idx:03d}.mp4"],check=True)
           out_t=0.0; act_map=[]; heads=[]; music_marks={}
@@ -155,15 +159,15 @@ jobs:
           def ts(t): return f"{int(t//3600)}:{int(t%3600//60):02d}:{t%60:05.2f}"
           ass=("[Script Info]\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\n"
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-            "Style: Cap,Inter,68,&H00FFFFFF,&H00FFFFFF,&H00000000,&HAA000000,-1,0,0,0,100,100,0,0,1,0,3,2,70,70,190,1\n"
-            "Style: Head,Fraunces,116,&H00EAF2F5,&H00EAF2F5,&H00000000,&H66000000,-1,0,0,0,100,100,6,0,1,0,4,8,60,60,150,1\n\n"
+            "Style: Cap,Inter,62,&H00FFFFFF,&H00FFFFFF,&H00000000,&H90000000,0,0,0,0,100,100,0.6,0,1,0,1.6,2,80,80,190,1\n"
+            "Style: Head,Fraunces,86,&H00EAF2F5,&H00EAF2F5,&H00000000,&H70000000,0,0,0,0,100,100,9,0,1,0,1.2,8,60,60,130,1\n\n"
             "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
           for st,en,ws in lines:
               txt=" ".join((BLUE+w+WHITE) if w.strip(".,!?;").lower() in HILITE else w for w in ws)
               cap=txt[0].upper()+txt[1:] if txt and txt[0].isalpha() else txt
-              ass+=f"Dialogue: 0,{ts(st)},{ts(max(en,st+0.7))},Cap,,0,0,0,,{cap}\n"
+              ass+=f"Dialogue: 0,{ts(st)},{ts(max(en,st+0.7))},Cap,,0,0,0,,{{\\fad(110,90)}}{cap}\n"
           for ht,txt in heads:
-              ass+=f"Dialogue: 1,{ts(ht)},{ts(ht+3.0)},Head,,0,0,0,,{{\\fad(250,250)}}{txt}\n"
+              ass+=f"Dialogue: 1,{ts(ht)},{ts(ht+3.2)},Head,,0,0,0,,{{\\fad(380,380)\\fsp7\\t(0,600,\\fsp10)}}{txt}\n"
           open("caps.ass","w").write(ass)
           json.dump(music_marks, open("marks.json","w"))
           print("segments:",idx,"out:",round(out_t,1),"caps:",len(lines))
