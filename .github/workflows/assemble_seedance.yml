@@ -45,8 +45,15 @@ jobs:
             ffmpeg -y -loglevel error -f concat -safe 0 -i list.txt -c:v libx264 -preset medium -crf 16 -pix_fmt yuv420p out/video_noaudio.mp4
           # real monologue audio (committed by chunks_put)
           test -f deliverables/audio_full_0717.m4a
+          VD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 out/video_noaudio.mp4)
+          AD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 deliverables/audio_full_0717.m4a)
+          FST=$(python3 -c "print(max(0, float('$VD')-1.5))")
+          PAD=$(python3 -c "print(max(0.1, float('$AD')-float('$VD')+1.0))")
+          echo "video=$VD audio=$AD fade_start=$FST pad=$PAD"
           ffmpeg -y -loglevel error -i out/video_noaudio.mp4 -i deliverables/audio_full_0717.m4a \
-            -c:v copy -c:a aac -b:a 256k -map 0:v -map 1:a -shortest "out/${OUT}.mp4"
+            -vf "fade=t=out:st=${FST}:d=1.5,tpad=stop_mode=clone:stop_duration=${PAD}" \
+            -c:v libx264 -preset medium -crf 16 -pix_fmt yuv420p \
+            -c:a aac -b:a 256k -map 0:v -map 1:a -shortest "out/${OUT}.mp4"
           ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "out/${OUT}.mp4"
           # QC stills every ~45s
           DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "out/${OUT}.mp4")
