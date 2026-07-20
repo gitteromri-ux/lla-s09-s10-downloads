@@ -35,22 +35,42 @@ jobs:
           mkdir -p chunks out deliverables/qc_cinema
           echo "$URLS" > urls.json
           N=$(jq length urls.json)
+          # Retime every chunk to exactly its driver window (per .pipeline:
+          # 15s each, except chunk 26 = 8s and chunk 27 = 9s) so lip-sync
+          # cannot drift across the film.
           for idx in $(seq 0 $((N-1))); do
             U=$(jq -r ".[$idx]" urls.json)
             II=$(printf "%02d" "$idx")
             curl -sS -L --fail --retry 4 --retry-delay 3 "$U" -o "chunks/c_${II}.mp4"
-            echo "file '$PWD/chunks/c_${II}.mp4'" >> list.txt
+            if [ "$idx" -eq $((N-1)) ]; then T=9; elif [ "$idx" -eq $((N-2)) ]; then T=8; else T=15; fi
+            D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "chunks/c_${II}.mp4")
+            F=$(awk "BEGIN{printf \"%.8f\", $T/$D}")
+            echo "chunk $II dur=$D target=$T factor=$F"
+            ffmpeg -y -loglevel error -i "chunks/c_${II}.mp4" \
+              -vf "setpts=PTS*${F},fps=30" -t "$T" -an \
+              -c:v libx264 -preset fast -crf 16 -pix_fmt yuv420p "chunks/r_${II}.mp4"
+            echo "file '$PWD/chunks/r_${II}.mp4'" >> list.txt
+            # per-chunk QC still (mid-chunk) for frame audit
+            ffmpeg -y -loglevel error -ss $(awk "BEGIN{printf \"%.2f\", $T*0.45}") -i "chunks/r_${II}.mp4" \
+              -frames:v 1 -q:v 3 "deliverables/qc_cinema/qc_chunk_${II}.jpg" || true
           done
           ffmpeg -y -loglevel error -f concat -safe 0 -i list.txt -c copy out/video_noaudio.mp4 || \
             ffmpeg -y -loglevel error -f concat -safe 0 -i list.txt -c:v libx264 -preset medium -crf 16 -pix_fmt yuv420p out/video_noaudio.mp4
           # real monologue audio (committed by chunks_put)
           test -f deliverables/audio_full_0717.m4a
+          VD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 out/video_noaudio.mp4)
+          AD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 deliverables/audio_full_0717.m4a)
+          FST=$(python3 -c "print(max(0, float('$VD')-1.5))")
+          PAD=$(python3 -c "print(max(0.1, float('$AD')-float('$VD')+1.0))")
+          echo "video=$VD audio=$AD fade_start=$FST pad=$PAD"
           ffmpeg -y -loglevel error -i out/video_noaudio.mp4 -i deliverables/audio_full_0717.m4a \
-            -c:v copy -c:a aac -b:a 256k -map 0:v -map 1:a -shortest "out/${OUT}.mp4"
+            -vf "fade=t=out:st=${FST}:d=1.5,tpad=stop_mode=clone:stop_duration=${PAD}" \
+            -c:v libx264 -preset medium -crf 16 -pix_fmt yuv420p \
+            -c:a aac -b:a 256k -map 0:v -map 1:a -shortest "out/${OUT}.mp4"
           ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "out/${OUT}.mp4"
           # QC stills every ~45s
           DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "out/${OUT}.mp4")
-          for p in 2 45 90 135 180 225 270 315 360 400; do
+          for p in 2 45 90 135 180 225 270 315 360 400 405; do
             ffmpeg -y -loglevel error -ss "$p" -i "out/${OUT}.mp4" -frames:v 1 "deliverables/qc_cinema/qc_${p}.jpg" || true
           done
       - name: Add page card + upload artifact + commit
