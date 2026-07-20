@@ -63,7 +63,7 @@ jobs:
             dict(name="why",    s=73.90, e=101.60,
                  heads=[(74.02,"WHY LONGEVITY NEVER STUCK FOR YOU")], broll=[]),
             dict(name="pillars",s=127.40,e=160.70,
-                 heads=[(127.50,"LONGEVITY IN SIX PILLARS · ONE CURRICULUM")],
+                 heads=[(127.50,"THE SIX PILLARS OF A LONGER LIFE")],
                  broll=[("site_nutrition",137.10,1.90),("site_sleep",139.00,1.80),
                         ("swimmer_dawn",140.80,1.80),("site_supplements",142.60,1.90),
                         ("site_wearables",144.50,1.70)]),
