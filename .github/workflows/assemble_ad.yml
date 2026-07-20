@@ -37,10 +37,15 @@ jobs:
             curl -sL --fail "$M/production/cards/anim/${c}_h.mp4?nc=$TS" -o "work/anim_${c}_h.mp4"
           done
           curl -sL --fail "$M/production/music/fa_sting.m4a" -o work/fa_sting.m4a || true
-          # THE bed: real FA music, French VO stripped by Demucs (separate_stems.yml)
-          curl -sL --fail "$M/production/music/fa_music_bed_long.m4a?nc=$TS" -o work/fa_bed.m4a || true
+          # THE bed, in order of preference:
+          # 1. client-supplied track  2. stem-separated FA music  3. temp bed
+          curl -sL --fail "$M/production/music/client_track_lgvty.mp3?nc=$TS" -o work/fa_bed.m4a || true
+          if ! ffprobe -v error -show_entries format=duration -of csv=p=0 work/fa_bed.m4a >/dev/null 2>&1; then
+            rm -f work/fa_bed.m4a
+            curl -sL --fail "$M/production/music/fa_music_bed_long.m4a?nc=$TS" -o work/fa_bed.m4a || true
+          fi
           if ffprobe -v error -show_entries format=duration -of csv=p=0 work/fa_bed.m4a >/dev/null 2>&1; then
-            echo "bed: REAL FA MUSIC (stem-separated)"
+            echo "bed: $(ffprobe -v error -show_entries format=duration -of csv=p=0 work/fa_bed.m4a)s real music bed"
           else
             rm -f work/fa_bed.m4a
             for u in "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Meditation%20Impromptu%2002.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Heart%20of%20Nowhere.mp3" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Almost%20in%20F.mp3"; do
