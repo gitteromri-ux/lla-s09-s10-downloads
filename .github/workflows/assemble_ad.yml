@@ -30,7 +30,7 @@ jobs:
           TS=$(date +%s)
           M="https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}"
           curl -sL --fail "$M/deliverables/Courtney_BGSWAP_0717.mp4?nc=$TS" -o work/base.mp4
-          for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol site_mental site_wearables food_flatlay swimmer_dawn oximeter_data; do
+          for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol site_mental site_wearables food_flatlay swimmer_dawn oximeter_data intro_src outro_src; do
             curl -sL --fail "$M/production/footage/clips/$c.mp4" -o "work/$c.mp4"
           done
           # brand fonts for captions + headlines
@@ -122,6 +122,32 @@ jobs:
                 "-c:v","libx264","-crf","17","-preset","fast","-c:a","aac","-ar","48000","-ac","2",
                 f"seg/{idx:02d}.mp4"],check=True)
 
+          def dur0(p):
+              return float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration",
+                  "-of","csv=p=0",p],capture_output=True,text=True).stdout.strip())
+
+          def introseg(idx):
+              # client intro animation: strip "Est. 2000", swap text credit for the
+              # official blue eTeacher strip cropped from the brand lockup. Own audio.
+              d = dur0("work/intro_src.mp4")
+              TL.append(round(d,4))
+              subprocess.run([FF,"-y","-i","assets/lla-logo-transparent@2x.png",
+                "-vf","crop=760:140:530:443,scale=-1:64","work/eteacher_strip.png"],check=True)
+              subprocess.run([FF,"-y","-i","work/intro_src.mp4","-i","work/eteacher_strip.png",
+                "-filter_complex",
+                f"[0:v]scale={W}:{H},fps={FPS},delogo=x=845:y=283:w=235:h=62,delogo=x=838:y=726:w=246:h=64[v0];"
+                f"[v0][1:v]overlay=(W-w)/2:728[v]",
+                "-map","[v]","-map","0:a","-c:v","libx264","-crf","17","-preset","fast",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:02d}.mp4"],check=True)
+
+          def outroseg(idx):
+              # client outro animation, untouched, own music
+              d = dur0("work/outro_src.mp4")
+              TL.append(round(d,4))
+              subprocess.run([FF,"-y","-i","work/outro_src.mp4",
+                "-vf",f"scale={W}:{H},fps={FPS}","-c:v","libx264","-crf","17","-preset","fast",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:02d}.mp4"],check=True)
+
           def cardseg(idx, png, dur):
               CARD_IDX.append(idx)
               TL.append(dur)
@@ -147,8 +173,8 @@ jobs:
               global i; i+=1; return i
 
           # ===== FULL MONOLOGUE - FA measured grammar (b-roll singles on her words) =====
-          # 0 · OPENER: 5s logo in neon frame, music-forward
-          cardseg(nx(), "production/cards/png/horizontal/open_h.png", 5.0)
+          # 0 · CLIENT INTRO: brand animation (Est.2000 removed, blue eTeacher strip), own audio
+          introseg(nx())
           # A · HOOK + TURN (her full text 37.4-69.68)
           her(nx(), 37.4, 6.24)                                   # "a thousand voices"
           broll(nx(), "noise_scroll", 5.28, 37.4, 6.24)           # "every influencer...contradicting"
@@ -201,7 +227,9 @@ jobs:
           mark("classlift")
           broll(nx(), "seat_light", 3.56, 378.48, 15.92)          # "Class is in session...a seat for you"
           her(nx(), 397.96, 4.36)                                 # "I'm Courtney. This is LLA."
-          cardseg(nx(), "production/cards/png/horizontal/outro_h.png", 5.0)
+          # CLIENT OUTRO with its own music -> fast cut to ENROLL NOW card
+          outroseg(nx())
+          cardseg(nx(), "production/cards/png/horizontal/outro_h.png", 3.0)
 
           with open("list.txt","w") as f:
               for k in range(1, i+1):
@@ -292,22 +320,23 @@ jobs:
           vchain = ",".join(head_filters(ALLSEGS, starts) + [f"subtitles={mcap}:fontsdir=fonts", fades])
           BED = "work/fa_bed.m4a" if _os.path.exists("work/fa_bed.m4a") else "work/bed.mp3"
           if _os.path.exists(BED):
-              # opener card sits at t=0: music-forward there, settles when she speaks
-              open_t = card_ts[0] if card_ts and card_ts[0] < 1.0 else None
+              # bed is SILENT under the client intro (own audio) and client outro (own music)
               cards_main = [t for t in card_ts if t >= 1.0]
               c1,c2,c3,c4 = (cards_main + [20,50,75,85])[:4]
+              INTRO_D = starts[1] if len(starts) > 1 else 5.0
+              OV = starts[43] if len(starts) > 43 else T-15.0   # seg 44 = client outro video
               # keyframed envelope with 0.5s linear ramps (an editor's fader, not a switch)
               br = MARKS.get("breath", 14)
               h0 = MARKS.get("harvard0", 48); h1 = MARKS.get("harvard1", 58)
               cl = MARKS.get("classlift", T-12)
-              head = [(0,0.62),(4.5,0.62),(5.6,0.36)] if open_t is not None else [(0,0.36)]
-              keys = head + [(br-0.4,0.30),(br+0.3,0.10),(br+2.8,0.14),          # music PRESENT from frame one; breath still dips
+              head = [(0,0.02),(INTRO_D-0.4,0.02),(INTRO_D+0.5,0.36)]
+              keys = head + [(br-0.4,0.30),(br+0.3,0.10),(br+2.8,0.14),          # breath dip
                       (c1-0.6,0.42),(c1,0.58),(c1+2.4,0.58),(c1+3.0,0.26),       # promise card swell
                       (c2-0.6,0.32),(c2,0.58),(c2+2.4,0.58),(c2+3.0,0.26),       # blueprint card swell
                       (h0-0.3,0.26),(h0+0.4,0.12),(h1-0.2,0.12),(h1+0.8,0.28),   # Harvard number lands drier
                       (c3-1.6,0.22),(c3-1.1,0.04),(c3-0.05,0.04),(c3,0.62),(c3+2.6,0.62),  # offer silence -> hit
                       (cl-0.3,0.28),(cl,0.42),                                    # "Class is in session" lift
-                      (c4-4.5,0.46),(c4-0.4,0.58),(c4,0.74),(T,0.74)]             # FINAL CULMINATION: builds through the close, peaks on outro
+                      (OV-4.0,0.48),(OV-0.4,0.62),(OV,0.02),(T,0.02)]             # culminate INTO the client outro, then its music takes over
               expr = f"{keys[-1][1]:.3f}"
               for (t0,v0),(t1,v1) in reversed(list(zip(keys, keys[1:]))):
                   seg_expr = f"({v0:.3f}+({v1:.3f}-{v0:.3f})*(t-{t0:.2f})/{max(t1-t0,0.01):.2f})"
@@ -376,18 +405,27 @@ jobs:
                   return CT, cards
               # envelope: present from frame one; swell on each card;
               # silence->hit on the offer card (last 2.8s card); outro rides out
-              open_p = bool(cards) and cards[0] < 1.0
               body = [c for c in cards if c >= 1.0]
               short = body[:-1] if len(body)>1 else body
               outro_c = body[-1] if body else CT-4.0
               offer_c = short[-1] if short else None
-              fk = [(0,0.62),(4.5,0.62),(5.6,0.38)] if open_p else [(0,0.38)]
+              # bed silent under client intro (seg 1, own audio)
+              if seglist and seglist[0] == 1:
+                  ih = cdur[0]
+                  fk = [(0,0.02),(ih-0.4,0.02),(ih+0.5,0.38)]
+              else:
+                  fk = [(0,0.38)]
               for c in (short[:-1] if offer_c is not None else short):
                   fk += [(c-0.6,0.44),(c,0.6),(c+2.4,0.6),(c+3.0,0.28)]
               if offer_c is not None:
                   fk += [(offer_c-1.2,0.30),(offer_c-0.7,0.04),(offer_c-0.05,0.04),
                          (offer_c,0.64),(offer_c+2.4,0.64),(offer_c+2.9,0.34)]
-              fk += [(outro_c-4.5,0.46),(outro_c-0.4,0.58),(outro_c,0.74),(CT,0.74)]   # final culmination
+              if 44 in seglist:
+                  # culminate into the client outro video, then ITS music takes over
+                  ov = cstarts[seglist.index(44)]
+                  fk += [(ov-4.0,0.48),(ov-0.4,0.62),(ov,0.02),(CT,0.02)]
+              else:
+                  fk += [(outro_c-4.5,0.46),(outro_c-0.4,0.58),(outro_c,0.74),(CT,0.74)]
               fk = sorted(set(fk), key=lambda x: x[0])
               fk = [k for j,k in enumerate(fk) if j==0 or k[0] > fk[j-1][0] + 0.02]
               fexpr = f"{fk[-1][1]:.3f}"
@@ -423,11 +461,11 @@ jobs:
           # pillars run -> 18 lessons -> blueprint -> Harvard 14yrs -> LLA offer
           # "raise your hand" -> offer card -> class in session -> I'm Courtney -> outro
           # (all indices +1: seg 1 is now the 5s opener, included in every cut)
-          S90 = [1, 2,3,4,5,6,7,8, 10, 14,15, 18, 20,21,22,23,24,25,26, 28,29, 32, 35,36, 40, 42,43, 44]
+          S90 = [1, 2,3,4,5,6,7,8, 10, 14,15, 18, 20,21,22,23,24,25,26, 28,29, 32, 35,36, 40, 42,43, 44,45]
           T90, cards90 = mixcut("Courtney_AD90S.mp4", S90, "AD90S")
 
           # FA-length cut (~55s): tightest spine
-          FA = [1, 2,3,4,5,6,7,8, 10, 20,21,22,23,24,25,26, 32, 40, 43, 44]
+          FA = [1, 2,3,4,5,6,7,8, 10, 20,21,22,23,24,25,26, 32, 40, 43, 44,45]
           TFA, cardsFA = mixcut("Courtney_AD55_FA.mp4", FA, "AD55")
 
           with open("EDIT_AUDIT.md","a") as f:
