@@ -229,6 +229,13 @@ jobs:
           # ===== LARGE CAPTIONS (.ass, brand-styled) + MASTERCLASS HEADLINES =====
           def a_time(t):
               return f"{int(t//3600)}:{int(t%3600//60):02d}:{t%60:05.2f}"
+          # proofread fixes: whisper mishearings corrected to what she actually says
+          CAPFIX = {
+            "not a pile of tip, nutrition, sleep, movement,": "not a pile of tips — nutrition, sleep, movement,",
+            "your hand real coaching that meets you where you are,": "your hand, real coaching that meets you where you are,",
+            "and your own numbers turned in to": "and your own numbers turned into",
+            "is, a guided classroom,": "is — a guided classroom,",
+          }
           def make_ass(fname, seglist, starts_list):
               ev = []
               for pos,k in enumerate(seglist):
@@ -242,6 +249,7 @@ jobs:
                           txt = t["text"].strip()
                           for pre in ("Okay. So ","Okay. ","Okay, ","Okay so "):
                               if txt.startswith(pre): txt = txt[len(pre):]; break
+                          txt = CAPFIX.get(txt, txt)
                           if txt.lower().rstrip(".") == "okay" or not txt: continue
                           txt = txt[0].upper() + txt[1:]
                           if en-st > 0.25: ev.append([st,min(en,st+6.0),txt])
