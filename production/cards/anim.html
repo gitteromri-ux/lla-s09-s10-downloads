@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <style>
-  /* LLA brand system — cinema card standard (matches approved cards.html),
-     animated: FA-style line-rise reveals, rule draw, slow push. */
+  /* LLA — premium editorial card system.
+     Fraunces at display optical size (opsz 144), real logo lockup on every card,
+     hairline rules, generous air. FA-style masked line-rise reveals. */
   :root{
     --navy:#0E1F48; --deep:#081634; --blue:#006EFF; --bone:#F5F2EA; --ink:#161A18;
     --lightblue:#7FB2E8; --teal:#63D3C1;
@@ -15,65 +16,76 @@
   html,body{width:100%;height:100%;overflow:hidden;background:#081634}
 
   .card{position:absolute;inset:0;color:var(--bone);display:none;
-        background:linear-gradient(180deg,#0D1D44 0%,#081634 100%);
+        background:
+          radial-gradient(ellipse 90% 70% at 50% 38%, #12264f 0%, transparent 60%),
+          linear-gradient(180deg,#0D1D44 0%,#071229 100%);
         flex-direction:column;align-items:center;justify-content:center;text-align:center;
-        animation:push 4.6s ease-out forwards}
+        animation:push 5.2s ease-out forwards}
   .card.on{display:flex}
-  @keyframes push{from{transform:scale(1.028)}to{transform:scale(1.0)}}
+  @keyframes push{from{transform:scale(1.024)}to{transform:scale(1.0)}}
   .card::after{content:"";position:absolute;inset:0;pointer-events:none;
         background:
-          radial-gradient(ellipse 140% 110% at 50% 50%, transparent 55%, rgba(4,10,26,.55) 100%),
-          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E")}
+          radial-gradient(ellipse 140% 110% at 50% 50%, transparent 55%, rgba(3,8,22,.6) 100%),
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E")}
 
   @keyframes fadein{from{opacity:0}to{opacity:1}}
   @keyframes risein{from{transform:translateY(112%)}to{transform:translateY(0)}}
-  @keyframes ruledraw{from{width:0}to{width:88px}}
-  @keyframes kickin{from{opacity:0;letter-spacing:20px}to{opacity:.95;letter-spacing:12px}}
+  @keyframes ruledraw{from{width:0}to{width:64px}}
+  @keyframes logodown{from{opacity:0;transform:translateY(-14px)}to{opacity:.96;transform:translateY(0)}}
 
-  .kick{font-family:'Inter';font-weight:700;font-size:30px;letter-spacing:12px;text-transform:uppercase;
-        color:var(--lightblue);opacity:0;animation:kickin .7s ease-out .15s forwards}
-  .rule{width:0;height:2px;background:var(--teal);margin:44px auto;
-        animation:ruledraw .55s cubic-bezier(.6,0,.2,1) .55s forwards}
-  .title{font-family:'Fraunces';font-weight:780;line-height:.98;letter-spacing:-2px;width:100%}
-  .title em{font-style:italic;color:var(--lightblue);letter-spacing:0}
-  .v-size .title{font-size:200px}
-  .h-size .title{font-size:196px}
-  /* line-rise reveal: each line masked, rises staggered (FA grammar) */
-  .ln{display:block;overflow:hidden}
-  .ln .li{display:block;transform:translateY(112%);animation:risein .72s cubic-bezier(.16,.84,.28,1) forwards}
+  .toplogo{height:84px;opacity:0;animation:logodown .9s cubic-bezier(.16,.84,.28,1) .2s forwards}
+  .v-size .toplogo{height:96px}
+  .rule{width:0;height:1px;background:linear-gradient(90deg,transparent,var(--teal),transparent);
+        margin:52px auto 58px;animation:ruledraw .6s cubic-bezier(.6,0,.2,1) .7s forwards}
 
-  .small{font-family:'Inter';font-weight:600;font-size:37px;letter-spacing:4px;opacity:0;margin-top:52px;
-         animation:fadein .6s ease-out 2.0s forwards}
-  .cta{font-family:'Fraunces';font-style:italic;font-weight:600;font-size:62px;color:var(--bone);margin-top:84px;
-       opacity:0;animation:fadein .6s ease-out 1.9s forwards}
-  .cta span{border-bottom:5px solid var(--teal);padding-bottom:12px}
-  .offerline{display:flex;gap:38px;align-items:baseline;justify-content:center;margin-top:26px}
-  .strike{font-family:'Fraunces';font-weight:700;font-size:130px;text-decoration:line-through;text-decoration-thickness:6px;
-          text-decoration-color:var(--lightblue);opacity:0;animation:fadein .45s ease-out .8s forwards}
-  .price{font-family:'Fraunces';font-weight:800;font-size:300px;color:var(--bone);line-height:1}
-  .price sup{font-size:90px;color:var(--teal)}
-  .pricewrap{overflow:hidden}
-  .pricewrap .price{transform:translateY(112%);animation:risein .8s cubic-bezier(.16,.84,.28,1) 1.05s forwards}
-  .foot{position:absolute;bottom:84px;left:0;right:0;font-family:'Inter';font-size:27px;letter-spacing:4px;
-        text-transform:uppercase;opacity:0;animation:fadein .6s ease-out 2.25s forwards}
+  .title{font-family:'Fraunces';font-weight:560;
+         font-variation-settings:"opsz" 144,"SOFT" 0,"WONK" 0;
+         line-height:1.04;letter-spacing:-1px;width:94%}
+  .title em{font-style:italic;color:var(--lightblue);font-weight:500;letter-spacing:0}
+  .h-size .title{font-size:168px}
+  .v-size .title{font-size:172px}
+  .ln{display:block;overflow:hidden;padding-bottom:.06em;margin-bottom:-.06em}
+  .ln .li{display:block;transform:translateY(112%);animation:risein .78s cubic-bezier(.16,.84,.28,1) forwards}
+
+  .meta{font-family:'Inter';font-weight:500;font-size:27px;letter-spacing:9px;text-transform:uppercase;
+        color:var(--bone);opacity:0;margin-top:66px;animation:fadein .7s ease-out 2.1s forwards}
+  .meta b{color:var(--teal);font-weight:600}
+
+  .kick{font-family:'Inter';font-weight:600;font-size:27px;letter-spacing:9px;text-transform:uppercase;
+        color:var(--lightblue);opacity:0;animation:fadein .7s ease-out .55s forwards}
+  .offerline{display:flex;gap:44px;align-items:baseline;justify-content:center;margin-top:30px}
+  .strike{font-family:'Fraunces';font-weight:500;font-variation-settings:"opsz" 144;font-size:112px;
+          text-decoration:line-through;text-decoration-thickness:4px;
+          text-decoration-color:var(--lightblue);opacity:0;animation:fadein .5s ease-out .85s forwards}
+  .price{font-family:'Fraunces';font-weight:620;font-variation-settings:"opsz" 144;
+         font-size:290px;color:var(--bone);line-height:1;letter-spacing:-4px}
+  .price sup{font-size:84px;color:var(--teal);font-weight:500}
+  .pricewrap{overflow:hidden;padding-bottom:.05em}
+  .pricewrap .price{display:block;transform:translateY(112%);animation:risein .85s cubic-bezier(.16,.84,.28,1) 1.1s forwards}
+  .cta{font-family:'Fraunces';font-style:italic;font-weight:520;font-variation-settings:"opsz" 60;
+       font-size:60px;color:var(--bone);margin-top:78px;opacity:0;animation:fadein .6s ease-out 1.95s forwards}
+  .cta span{border-bottom:3px solid var(--teal);padding-bottom:12px}
+  .foot{position:absolute;bottom:80px;left:0;right:0;font-family:'Inter';font-weight:500;font-size:25px;
+        letter-spacing:5px;text-transform:uppercase;color:var(--bone);opacity:0;animation:fadein .6s ease-out 2.3s forwards}
   .foot b{color:var(--teal);font-weight:600}
-  .logoimg{width:760px;max-width:88%;opacity:0;animation:fadein .8s ease-out .2s forwards}
-  .tagline{font-family:'Fraunces';font-style:italic;font-weight:650;font-size:78px;margin-top:80px;color:var(--bone);
-           opacity:0;animation:fadein .8s ease-out 1.0s forwards}
 
-  .neon{font-family:'Inter';font-weight:800;font-size:56px;letter-spacing:6px;color:#fff;
-        border:3px solid var(--teal);border-radius:999px;padding:30px 90px;margin-top:70px;
+  .logoimg{width:820px;max-width:86%;opacity:0;animation:fadein .9s ease-out .25s forwards}
+  .tagline{font-family:'Fraunces';font-style:italic;font-weight:520;font-variation-settings:"opsz" 100;
+           font-size:74px;margin-top:84px;color:var(--bone);opacity:0;animation:fadein .8s ease-out 1.05s forwards}
+
+  .neon{font-family:'Inter';font-weight:700;font-size:52px;letter-spacing:8px;color:#fff;
+        border:2px solid var(--teal);border-radius:999px;padding:32px 100px;margin-top:76px;
         text-shadow:0 0 16px rgba(99,211,193,.9),0 0 42px rgba(0,110,255,.6);
-        box-shadow:0 0 30px rgba(99,211,193,.55), inset 0 0 22px rgba(99,211,193,.25);
-        opacity:0;animation:fadein .7s ease-out 1.1s forwards, glowpulse 1.6s ease-in-out 1.8s infinite alternate}
-  @keyframes glowpulse{from{box-shadow:0 0 26px rgba(99,211,193,.45)}to{box-shadow:0 0 52px rgba(99,211,193,.85)}}
-  .tp{margin-top:56px;display:flex;gap:22px;align-items:center;justify-content:center;
-      opacity:0;animation:fadein .8s ease-out 1.7s forwards}
-  .stars{font-size:54px;color:#00B67A;text-shadow:0 0 18px rgba(0,182,122,.9)}
+        box-shadow:0 0 30px rgba(99,211,193,.5), inset 0 0 22px rgba(99,211,193,.2);
+        opacity:0;animation:fadein .7s ease-out 1.15s forwards, glowpulse 1.7s ease-in-out 1.9s infinite alternate}
+  @keyframes glowpulse{from{box-shadow:0 0 26px rgba(99,211,193,.4)}to{box-shadow:0 0 56px rgba(99,211,193,.85)}}
+  .tp{margin-top:58px;display:flex;gap:22px;align-items:center;justify-content:center;
+      opacity:0;animation:fadein .8s ease-out 1.75s forwards}
+  .stars{font-size:50px;color:#00B67A;text-shadow:0 0 16px rgba(0,182,122,.85)}
   .stars .half{opacity:.45}
-  .tptxt{font-family:'Inter';font-weight:600;font-size:36px;color:var(--bone);opacity:.9}
+  .tptxt{font-family:'Inter';font-weight:500;font-size:34px;color:var(--bone);opacity:.92}
 
-  /* 5s OPENER: logo alone in a neon frame, light sweep. No Trustpilot here. */
+  /* 5s opener (kept as standalone asset): logo in neon frame, light sweep */
   @keyframes frameon{to{opacity:1;transform:scale(1)}}
   @keyframes neonpulse{from{box-shadow:0 0 34px rgba(99,211,193,.45), inset 0 0 26px rgba(99,211,193,.12), 0 0 80px rgba(0,110,255,.28)}
                        to{box-shadow:0 0 68px rgba(99,211,193,.85), inset 0 0 40px rgba(99,211,193,.22), 0 0 130px rgba(0,110,255,.5)}}
@@ -102,26 +114,27 @@
 </div>
 
 <div class="card" id="cta1">
-  <div class="kick">Longevity Life Academy</div>
+  <img class="toplogo" src="../../assets/lla-logo-transparent@2x.png">
   <div class="rule"></div>
   <div class="title" data-lines-h="Your own blueprint|for a <em>longer, better life.</em>"
        data-lines-v="Your own|blueprint for a|<em>longer,</em>|<em>better life.</em>"></div>
 </div>
 
 <div class="card" id="cta2">
-  <div class="kick">The Method</div>
+  <img class="toplogo" src="../../assets/lla-logo-transparent@2x.png">
   <div class="rule"></div>
   <div class="title" data-lines-h="Increase your|<em>life trajectory.</em>"
        data-lines-v="Increase|your life|<em>trajectory.</em>"></div>
-  <div class="small">EAT · SLEEP · MOVE · SUPPLEMENT · HEART · DATA</div>
+  <div class="meta">Eat · Sleep · Move · Supplement · <b>Heart</b> · Data</div>
 </div>
 
 <div class="card" id="cta3">
-  <div class="kick">20% Off · This Week Only</div>
+  <img class="toplogo" src="../../assets/lla-logo-transparent@2x.png">
   <div class="rule"></div>
-  <div class="offerline"><div class="strike" style="opacity:0;animation:fadein .45s ease-out .8s forwards">$1,500</div></div>
+  <div class="kick">20% Off · This Week Only</div>
+  <div class="offerline"><div class="strike">$1,500</div></div>
   <div class="pricewrap"><div class="price">$1,200<sup>*</sup></div></div>
-  <div class="cta" style="margin-top:70px"><span>Claim your seat</span></div>
+  <div class="cta"><span>Claim your seat</span></div>
   <div class="foot"><b>18 live sessions</b> · 20% off · this week only</div>
 </div>
 
@@ -139,7 +152,7 @@
 </div>
 
 <script>
-// Build masked line-rise titles from data-lines-(h|v); stagger per line.
+// Masked line-rise titles from data-lines-(h|v); stagger per line.
 const p = new URLSearchParams(location.search);
 const id = p.get('card') || 'cta1';
 const o = p.get('o') === 'h' ? 'h' : 'v';
@@ -150,7 +163,7 @@ const t = cardEl.querySelector('.title');
 if (t) {
   const lines = (t.getAttribute(o === 'h' ? 'data-lines-h' : 'data-lines-v') || '').split('|');
   t.innerHTML = lines.map((ln, i) =>
-    `<span class="ln"><span class="li" style="animation-delay:${(0.35 + i*0.14).toFixed(2)}s">${ln}</span></span>`
+    `<span class="ln"><span class="li" style="animation-delay:${(0.5 + i*0.16).toFixed(2)}s">${ln}</span></span>`
   ).join('');
 }
 </script>
