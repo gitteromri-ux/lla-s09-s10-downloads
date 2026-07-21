@@ -261,6 +261,8 @@ jobs:
           subprocess.run([FF,"-y","-loglevel","error","-f","concat","-safe","0","-i","list.txt","-c","copy","cut.mp4"],check=True)
           def src2out(t):
               for s,e,o in act_map:
+                  if s <= t <= e: return o + (t-s)
+              for s,e,o in act_map:
                   if s-0.3 <= t <= e+0.3: return o + (t-s)
               return None
           HILITE={"direct","path","six","pillars","18","14","blueprint","class","session","seat","courtney","longevity","academy","harvard"}
