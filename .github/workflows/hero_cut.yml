@@ -73,9 +73,8 @@ jobs:
             dict(name="pillars", s=127.40, e=146.20,
                  heads=[(127.50,"THE SIX PILLARS OF A LONGER LIFE")],
                  emph=[133.00],
-                 broll=[("site_nutrition",137.10,1.90),("swimmer_dawn",139.00,1.90),
-                        ("site_supplements",140.90,1.90),("site_yoga",142.80,1.90),
-                        ("oximeter_data",144.70,1.60)]),
+                 broll=[("site_nutrition",137.05,1.00),("swimmer_dawn",139.10,1.20),
+                        ("site_supplements",140.60,1.75),("oximeter_data",144.05,2.00)]),
             dict(name="blueprint", s=157.20, e=160.70,
                  heads=[], emph=[157.28], broll=[]),
             dict(name="proof", s=171.10, e=182.60,
@@ -154,8 +153,8 @@ jobs:
               im.save(f"{tag}.png"); return Wt,Ht
           CARD_SPECS={
             "cta1":[("k","LONGEVITY LIFE ACADEMY",None),
-                    ("m",[("Become the person",BONE)],None),
-                    ("m",[("who ages slower.",ACC)],None)],
+                    ("m",[("A longer life,",BONE)],None),
+                    ("m",[("taught properly.",ACC)],None)],
             "cta2":[("k","18 LIVE SESSIONS \u00b7 SIX PILLARS",None),
                     ("m",[("Master the path,",BONE)],None),
                     ("m",[("week by week.",ACC)],None)],
