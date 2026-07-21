@@ -98,16 +98,16 @@ jobs:
           def snap(t, lo, hi):
               c=[g for g in gaps if lo< g < hi]
               return min(c, key=lambda g: abs(g-t)) if c else t
-          idx=0; tight=False
+          idx=0; tight=False; PLAN=[]
           def enc_her(ss,dur,tg):
-              global idx; idx+=1
+              global idx; idx+=1; PLAN.append(dur)
               vf=(TIGHT if tg else "")+GRADE+f",scale={W}:{H},fps={FPS}"
               subprocess.run([FF,"-y","-loglevel","error","-ss",str(ss),"-t",str(dur),"-i","base.mp4",
                 "-vf",vf,"-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
           def enc_broll(clip,dur,a_ss):
-              global idx; idx+=1
+              global idx; idx+=1; PLAN.append(dur)
               if clip=="noise_screens":
                   vf=(f"crop=w=iw*0.80:h=ih*0.80:x=(iw-ow)*0.5*min(1\\,t/{dur}):y=(ih-oh)*0.25,"
                       f"scale={W}:{H}:flags=lanczos,fps={FPS},"+GRADE)
@@ -121,7 +121,7 @@ jobs:
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
           def enc_card(png,dur):
-              global idx; idx+=1
+              global idx; idx+=1; PLAN.append(dur)
               subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i",png,
                 "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
                 "-vf",f"scale={W}:{H},fps={FPS},fade=t=in:d=0.45,fade=t=out:st={dur-0.45}:d=0.45",
@@ -166,7 +166,7 @@ jobs:
           }
           card_idxs=[]
           def enc_anim_card(cname,dur=2.6):
-              global idx; idx+=1
+              global idx; idx+=1; PLAN.append(dur)
               spec=CARD_SPECS[cname]; layers=[]
               for j,item in enumerate(spec):
                   kind,payload,sk=item
@@ -196,7 +196,7 @@ jobs:
                  "-c:a","aac","-shortest",f"seg/{idx:03d}.mp4"],check=True)
               card_idxs.append(idx)
           def enc_freeze(frame_at,a_ss,dur):
-              global idx; idx+=1
+              global idx; idx+=1; PLAN.append(dur)
               subprocess.run([FF,"-y","-loglevel","error","-ss",str(frame_at),"-i","base.mp4",
                 "-frames:v","1","hold.png"],check=True)
               subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i","hold.png",
@@ -259,6 +259,17 @@ jobs:
           with open("list.txt","w") as f:
               for k in range(1,idx+1): f.write(f"file 'seg/{k:03d}.mp4'\n")
           subprocess.run([FF,"-y","-loglevel","error","-f","concat","-safe","0","-i","list.txt","-c","copy","cut.mp4"],check=True)
+          import bisect
+          real=[]
+          for k in range(1,idx+1):
+              d=float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",f"seg/{k:03d}.mp4"],capture_output=True,text=True).stdout)
+              real.append(d)
+          pcum=[0.0]; rcum=[0.0]
+          for p,r in zip(PLAN,real): pcum.append(pcum[-1]+p); rcum.append(rcum[-1]+r)
+          def remap(t):
+              i=max(0,bisect.bisect_right(pcum,t)-1); i=min(i,len(real)-1)
+              return rcum[i]+min(max(0.0,t-pcum[i]), real[i])
+          print("plan total",round(pcum[-1],2),"real total",round(rcum[-1],2),"drift",round(rcum[-1]-pcum[-1],2))
           def src2out(t):
               for s,e,o in act_map:
                   if s <= t <= e: return o + (t-s)
@@ -289,11 +300,13 @@ jobs:
               txt=" ".join((BLUE+w+WHITE) if w.strip(".,!?;").lower() in HILITE else w for w in ws)
               cap=txt[0].upper()+txt[1:] if sent and txt and txt[0].isalpha() else txt
               sent=bool(ws and ws[-1] and ws[-1][-1] in ".!?")
-              ass+=f"Dialogue: 0,{ts(st)},{ts(max(en,st+0.7))},Cap,,0,0,0,,{{\\fad(110,90)}}{cap}\n"
+              rs,re=remap(st),remap(en)
+              ass+=f"Dialogue: 0,{ts(rs)},{ts(max(re,rs+0.7))},Cap,,0,0,0,,{{\\fad(110,90)}}{cap}\n"
           for ht,txt in heads:
-              ass+=f"Dialogue: 1,{ts(ht)},{ts(ht+3.2)},Head,,0,0,0,,{{\\fad(380,380)\\fsp7\\t(0,600,\\fsp10)}}{txt}\n"
+              rh=remap(ht)
+              ass+=f"Dialogue: 1,{ts(rh)},{ts(rh+3.2)},Head,,0,0,0,,{{\\fad(380,380)\\fsp7\\t(0,600,\\fsp10)}}{txt}\n"
           open("caps.ass","w").write(ass)
-          json.dump(music_marks, open("marks.json","w"))
+          json.dump({k:remap(v) for k,v in music_marks.items()}, open("marks.json","w"))
           print("segments:",idx,"out:",round(out_t,1),"caps:",len(lines))
           PY
       - name: Final encode (captions + music arc + room tone)
