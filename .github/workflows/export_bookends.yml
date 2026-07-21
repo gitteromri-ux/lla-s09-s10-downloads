@@ -36,21 +36,20 @@ jobs:
           # OUTRO v2: cut the sensor/product demo section, keep the LAPTOP
           # live-session scene, slowed for dwell. Music guaranteed.
           ffprobe -v error -show_entries stream=codec_type -of csv=p=0 work/outro_src.mp4 | tee work/streams.txt
-          # find the scene cut between the demo and the laptop scene (3.0-4.6s)
-          CUT=$(ffmpeg -i work/outro_src.mp4 -vf "select='gt(scene,0.30)',metadata=print" -f null - 2>&1 \
-                | grep -oE "pts_time:[0-9.]+" | cut -d: -f2 \
-                | awk '$1>=3.0 && $1<=4.6 {print; exit}')
-          [ -z "$CUT" ] && CUT=3.6
-          CUT=$(python3 -c "print(min(float('$CUT'), 3.65))")
-          echo "scene cut at: $CUT"
-          D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 work/outro_src.mp4)
-          if grep -q audio work/streams.txt; then
-            ffmpeg -y -ss "$CUT" -i work/outro_src.mp4 \
-              -vf "scale=1920:1080,fps=30,setpts=PTS/0.65" -af "atempo=0.65" \
+          # LAPTOP scene only: starts ~3.4s, ends before the Abbott unboxing (~4.5s).
+          # detect precise boundaries, fall back to measured frame-sweep values.
+          SC=$(ffmpeg -i work/outro_src.mp4 -vf "select='gt(scene,0.28)',metadata=print" -f null - 2>&1 \
+                | grep -oE "pts_time:[0-9.]+" | cut -d: -f2)
+          S1=$(echo "$SC" | awk '$1>=3.2 && $1<=3.8 {print; exit}'); [ -z "$S1" ] && S1=3.45
+          S2=$(echo "$SC" | awk '$1>=4.25 && $1<=4.95 {print; exit}'); [ -z "$S2" ] && S2=4.55
+          echo "laptop scene: $S1 -> $S2"
+          if ffprobe -v error -show_entries stream=codec_type -of csv=p=0 work/outro_src.mp4 | grep -q audio; then
+            ffmpeg -y -ss "$S1" -to "$S2" -i work/outro_src.mp4 \
+              -vf "scale=1920:1080,fps=30,setpts=PTS/0.5" -af "atempo=0.5" \
               -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/ov0.mp4
           else
-            ffmpeg -y -ss "$CUT" -i work/outro_src.mp4 -f lavfi -t 10 -i anullsrc=r=48000:cl=stereo \
-              -map 0:v -map 1:a -vf "scale=1920:1080,fps=30,setpts=PTS/0.65" -shortest \
+            ffmpeg -y -ss "$S1" -to "$S2" -i work/outro_src.mp4 -f lavfi -t 10 -i anullsrc=r=48000:cl=stereo \
+              -map 0:v -map 1:a -vf "scale=1920:1080,fps=30,setpts=PTS/0.5" -shortest \
               -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/ov0.mp4
           fi
           # music check: if the section is effectively silent, lay the client track under it
