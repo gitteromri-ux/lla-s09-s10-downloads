@@ -1,0 +1,15 @@
+name: Export standalone intro + outro
+
+# Registration copy on main — dispatched runs use the file at the dispatched ref.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Registration stub — dispatch on the feature branch ref."
