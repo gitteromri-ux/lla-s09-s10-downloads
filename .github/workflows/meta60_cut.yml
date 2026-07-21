@@ -309,32 +309,29 @@ jobs:
       - name: Final encode (captions + music arc + room tone)
         run: |
           set -e
-          python3 - <<'PY'
+          python3 - <<'PYEOF'
           import json, subprocess
           mk=json.load(open("marks.json"))
           D=float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0","cut.mp4"],capture_output=True,text=True).stdout)
-          tp,tm,te = mk["proof"], mk.get("monta",mk["close"]), mk["end"]
-          vol=(f"if(lt(t,{tp}),0.26,"
-               f"if(lt(t,{tm}),0.26+0.16*min(1,(t-{tp})/2.5),"
-               f"if(lt(t,{te}),0.42+0.30*min(1,(t-{tm})/1.8),0.75)))")
-          tj=max(6.0, tm-4.8)
+          tp=mk["proof"]; tm=mk.get("monta",mk["close"]); te=mk["end"]
+          vol=(f"if(lt(t,{tp}),0.20,"
+               f"if(lt(t,{tm}),0.20+0.14*min(1,(t-{tp})/2.5),"
+               f"if(lt(t,{te}),0.36+0.28*min(1,(t-{tm})/1.8),0.66)))")
           cmd=["ffmpeg","-y","-loglevel","error","-i","cut.mp4",
-            "-i","assets/music_bed_0717.mp3","-i","assets/music_bed_0717.mp3",
-            "-stream_loop","-1","-i","tone.wav","-loop","1","-i","shadow.png",
+            "-stream_loop","-1","-i","assets/music_bed_0717.mp3",
+            "-stream_loop","-1","-i","tone.wav",
             "-filter_complex",
-            f"[0:v][4:v]overlay=0:0,subtitles=caps.ass:fontsdir=fonts,noise=alls=5:allf=t[vout];"
+            f"[0:v]subtitles=caps.ass:fontsdir=fonts,noise=alls=4:allf=t[vout];"
             f"[0:a]asplit=2[voice][sc];"
-            f"[1:a]atrim=0:{tj+0.6},afade=t=out:st={tj-0.6}:d=1.2[bA];"
-            f"[2:a]atrim=24.2:55.4,afade=t=in:d=1.0,afade=t=out:st={D-tj-0.9 if D-tj<31.2 else 30.3}:d=0.9,adelay={int(tj*1000)}|{int(tj*1000)}[bB];"
-            f"[bA][bB]amix=inputs=2:duration=longest:normalize=0,volume=volume='{vol}':eval=frame,afade=t=out:st={D-0.9}:d=0.9[m1];"
-            f"[m1][sc]sidechaincompress=threshold=0.024:ratio=5:attack=25:release=380[mus];"
-            f"[3:a]volume=0.5,afade=t=out:st={D-1.5}:d=1.5[tone];"
+            f"[1:a]volume=volume='{vol}':eval=frame,afade=t=out:st={D-0.9}:d=0.9[m1];"
+            f"[m1][sc]sidechaincompress=threshold=0.03:ratio=4:attack=25:release=380[mus];"
+            f"[2:a]volume=0.5,afade=t=out:st={D-1.5}:d=1.5[tone];"
             f"[voice][mus][tone]amix=inputs=3:duration=first:normalize=0[aout]",
-            "-map","[vout]","-map","[aout]","-c:v","libx264","-crf","16","-preset","medium",
+            "-map","[vout]","-map","[aout]","-c:v","libx264","-crf","17","-preset","fast",
             "-pix_fmt","yuv420p","-c:a","aac","-b:a","256k","-movflags","+faststart","Courtney_META60.mp4"]
           subprocess.run(cmd,check=True)
           subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size","-of","default=noprint_wrappers=1","Courtney_META60.mp4"],check=True)
-          PY
+          PYEOF
           mkdir -p deliverables/qc_cinema
           for p in 1 4 10 16 24 34 44 52 62 72 82 88 94; do
             ffmpeg -y -loglevel error -ss "$p" -i Courtney_META60.mp4 -frames:v 1 "deliverables/qc_cinema/ad90_${p}.jpg" || true
