@@ -1,0 +1,20 @@
+name: Riverside operator agent
+
+# Registration copy on main — dispatched runs use the file at the dispatched ref.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "probe | login_configure | join_guest"
+        required: true
+        default: "probe"
+
+permissions:
+  contents: write
+
+jobs:
+  operate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Registration stub — dispatch on the feature branch ref."
