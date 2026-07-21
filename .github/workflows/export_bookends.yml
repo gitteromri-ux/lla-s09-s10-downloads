@@ -1,0 +1,63 @@
+name: Export standalone intro + outro
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Build bookends
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          TS=$(date +%s)
+          M="https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}"
+          mkdir -p work deliverables/bookends
+          curl -sL --fail "$M/production/footage/clips/intro_src.mp4?nc=$TS" -o work/intro_src.mp4
+          curl -sL --fail "$M/production/footage/clips/outro_src.mp4?nc=$TS" -o work/outro_src.mp4
+          curl -sL --fail "$M/production/cards/anim/outro_h.mp4?nc=$TS" -o work/card.mp4
+          curl -sL --fail "$M/production/music/fa_sting.m4a" -o work/fa_sting.m4a || true
+
+          # INTRO: Est.2000 removed, official blue eTeacher strip composited, own audio
+          ffmpeg -y -i assets/lla-logo-transparent@2x.png -vf "crop=760:140:530:443,scale=-1:64" work/strip.png
+          ffmpeg -y -i work/intro_src.mp4 -i work/strip.png -filter_complex \
+            "[0:v]scale=1920:1080,fps=30,delogo=x=845:y=283:w=235:h=62,delogo=x=838:y=726:w=246:h=64[v0];[v0][1:v]overlay=(W-w)/2:728[v]" \
+            -map "[v]" -map 0:a -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p \
+            -c:a aac -b:a 256k -movflags +faststart deliverables/bookends/LLA_INTRO_FINAL.mp4
+
+          # OUTRO: client outro (own music) -> fast cut to ENROLL card (sting hit)
+          ffmpeg -y -i work/outro_src.mp4 -vf "scale=1920:1080,fps=30" \
+            -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/ov.mp4
+          if [ -f work/fa_sting.m4a ]; then
+            ffmpeg -y -t 3.0 -i work/card.mp4 -i work/fa_sting.m4a -filter_complex \
+              "[1:a]volume=0.7,apad,atrim=0:3.0[a]" -map 0:v -map "[a]" \
+              -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/cardseg.mp4
+          else
+            ffmpeg -y -t 3.0 -i work/card.mp4 -f lavfi -t 3.0 -i anullsrc=r=48000:cl=stereo \
+              -map 0:v -map 1:a -c:v libx264 -crf 16 -preset medium -c:a aac -shortest work/cardseg.mp4
+          fi
+          printf "file 'ov.mp4'\nfile 'cardseg.mp4'\n" > work/cc.txt
+          ffmpeg -y -f concat -safe 0 -i work/cc.txt -c:v libx264 -crf 16 -preset medium \
+            -pix_fmt yuv420p -c:a aac -b:a 256k -movflags +faststart deliverables/bookends/LLA_OUTRO_FINAL.mp4
+
+          ffprobe -v error -show_entries format=duration -of csv=p=0 deliverables/bookends/LLA_INTRO_FINAL.mp4
+          ffprobe -v error -show_entries format=duration -of csv=p=0 deliverables/bookends/LLA_OUTRO_FINAL.mp4
+      - name: Commit
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git add deliverables/bookends
+          git commit -m "Standalone bookends: processed intro + outro sequence"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
