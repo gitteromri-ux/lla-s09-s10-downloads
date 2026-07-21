@@ -60,7 +60,7 @@ jobs:
           words = [(w["s"], w["e"], w["w"].strip()) for seg in T for w in seg["words"]]
           FF="ffmpeg"; W,H,FPS=1920,1080,30
           os.makedirs("seg", exist_ok=True)
-          GRADE="curves=preset=medium_contrast,eq=contrast=1.05:saturation=1.08:brightness=0.01,colorbalance=rm=.02:bm=-.02,vignette=PI/6.2"
+          GRADE="eq=contrast=1.03:saturation=1.02:brightness=0.035:gamma=1.05,colorbalance=rm=.01:bm=-.01"
           TIGHT="crop=1680:945:(iw-1680)/2:(ih-945)*0.30,scale=1920:1080:flags=lanczos,"
           ACTS=[
             dict(name="hook", s=39.60, e=43.00, heads=[], emph=[],
@@ -91,7 +91,7 @@ jobs:
           idx=0; tight=False; PLAN=[]
           def enc_her(ss,dur,tg):
               global idx; idx+=1; PLAN.append(dur)
-              vf=(TIGHT if tg else "")+GRADE+f",scale={W}:{H},fps={FPS}"
+              vf=(""       if True else TIGHT)+GRADE+f",scale={W}:{H},fps={FPS}"
               subprocess.run([FF,"-y","-loglevel","error","-ss",str(ss),"-t",str(dur),"-i","base.mp4",
                 "-vf",vf,"-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
