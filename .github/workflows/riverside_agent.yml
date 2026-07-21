@@ -1,0 +1,74 @@
+name: Riverside operator agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "probe | login_configure | join_guest"
+        required: true
+        default: "probe"
+
+permissions:
+  contents: write
+
+jobs:
+  operate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Setup Playwright
+        run: |
+          pip3 install --quiet playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Run agent
+        env:
+          RS_ACTION: ${{ github.event.inputs.action }}
+          RS_EMAIL: ${{ secrets.RS_EMAIL }}
+          RS_PASSWORD: ${{ secrets.RS_PASSWORD }}
+        run: |
+          mkdir -p deliverables/riverside_agent
+          python3 - <<'PY'
+          import os, time
+          from playwright.sync_api import sync_playwright
+
+          ACTION = os.environ.get("RS_ACTION", "probe")
+          OUT = "deliverables/riverside_agent"
+
+          with sync_playwright() as p:
+              b = p.chromium.launch(args=[
+                  "--use-fake-ui-for-media-stream",
+                  "--use-fake-device-for-media-stream",
+              ])
+              ctx = b.new_context(viewport={"width":1440,"height":900},
+                                  permissions=["camera","microphone"])
+              pg = ctx.new_page()
+
+              def snap(name):
+                  pg.screenshot(path=f"{OUT}/{name}.png", full_page=False)
+                  print("snap:", name, "| url:", pg.url)
+
+              if ACTION == "probe":
+                  pg.goto("https://riverside.com/", timeout=60000)
+                  pg.wait_for_timeout(4000); snap("01_home")
+                  pg.goto("https://riverside.com/login", timeout=60000)
+                  pg.wait_for_timeout(4000); snap("02_login")
+                  # try the dashboard host too
+                  pg.goto("https://app.riverside.fm/login", timeout=60000)
+                  pg.wait_for_timeout(4000); snap("03_app_login")
+                  print("PROBE OK")
+              b.close()
+          PY
+          ls -la deliverables/riverside_agent
+      - name: Commit proof screenshots
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add deliverables/riverside_agent
+          git commit -m "Riverside agent: proof screenshots" || echo "no changes"
+          for n in 1 2 3 4; do
+            git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
+          done
