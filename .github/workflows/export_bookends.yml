@@ -33,49 +33,29 @@ jobs:
             -map "[v]" -map 0:a -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p \
             -c:a aac -b:a 256k -movflags +faststart deliverables/bookends/LLA_INTRO_FINAL.mp4
 
-          # OUTRO v3: ORIGINAL video, original pace. ONLY the Abbott box at the
-          # end is cut (scene boundary ~4.55s). Nothing else touched.
-          ffprobe -v error -show_entries stream=codec_type -of csv=p=0 work/outro_src.mp4 | tee work/streams.txt
+          # OUTRO v4: ORIGINAL video + ORIGINAL pace. Video cuts away right before
+          # the Abbott unboxing; the ORIGINAL MUSIC KEEPS PLAYING over the ending card
+          # and fades at its natural end. Laptop scene untouched.
           SC=$(ffmpeg -i work/outro_src.mp4 -vf "select='gt(scene,0.28)',metadata=print" -f null - 2>&1 \
                 | grep -oE "pts_time:[0-9.]+" | cut -d: -f2)
-          S2=$(echo "$SC" | awk '$1>=4.25 && $1<=4.95 {print; exit}'); [ -z "$S2" ] && S2=4.55
-          echo "cutting Abbott box from: $S2"
-          if grep -q audio work/streams.txt; then
-            ffmpeg -y -to "$S2" -i work/outro_src.mp4 \
-              -vf "scale=1920:1080,fps=30" \
-              -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/ov0.mp4
-          else
-            ffmpeg -y -to "$S2" -i work/outro_src.mp4 -f lavfi -t 10 -i anullsrc=r=48000:cl=stereo \
-              -map 0:v -map 1:a -vf "scale=1920:1080,fps=30" -shortest \
-              -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/ov0.mp4
-          fi
-          # music check: if the section is effectively silent, lay the client track under it
-          MV=$(ffmpeg -i work/ov0.mp4 -af volumedetect -f null - 2>&1 | grep mean_volume | grep -oE "\-?[0-9.]+ dB" | grep -oE "\-?[0-9.]+")
-          echo "outro mean volume: $MV dB"
-          NEED_BED=$(python3 -c "print(1 if float('${MV:--99}') < -35 else 0)")
-          OD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 work/ov0.mp4)
-          if [ "$NEED_BED" = "1" ] && [ -f production/music/client_track_lgvty.mp3 ]; then
-            echo "outro is silent -> client track under the whole outro"
-            ffmpeg -y -i work/ov0.mp4 -i production/music/client_track_lgvty.mp3 -filter_complex \
-              "[1:a]silenceremove=start_periods=1:start_threshold=-40dB,volume=0.55,afade=t=in:d=0.3[m];[0:a][m]amix=inputs=2:duration=first:normalize=0[a]" \
-              -map 0:v -map "[a]" -c:v copy -c:a aac -ar 48000 -ac 2 work/ov.mp4
-          else
-            cp work/ov0.mp4 work/ov.mp4
-          fi
-          # publish processed outro for the film assembler to reuse
-          cp work/ov.mp4 production/footage/clips/outro_proc.mp4
-          if [ -f work/fa_sting.m4a ]; then
-            ffmpeg -y -t 3.5 -i work/card.mp4 -i work/fa_sting.m4a -filter_complex \
-              "[1:a]volume=0.7,apad,atrim=0:3.5[a]" -map 0:v -map "[a]" \
-              -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/cardseg.mp4
-          else
-            ffmpeg -y -t 3.5 -i work/card.mp4 -f lavfi -t 3.5 -i anullsrc=r=48000:cl=stereo \
-              -map 0:v -map 1:a -c:v libx264 -crf 16 -preset medium -c:a aac -shortest work/cardseg.mp4
-          fi
-          printf "file 'ov.mp4'\nfile 'cardseg.mp4'\n" > work/cc.txt
-          ffmpeg -y -f concat -safe 0 -i work/cc.txt -c:v libx264 -crf 16 -preset medium \
-            -pix_fmt yuv420p -c:a aac -b:a 256k -movflags +faststart deliverables/bookends/LLA_OUTRO_FINAL.mp4
-
+          S2=$(echo "$SC" | awk '$1>=4.5 && $1<=4.98 {print; exit}'); [ -z "$S2" ] && S2=4.70
+          S2=$(python3 -c "print(max(4.4, float('$S2') - 0.04))")
+          echo "video cuts to card at: $S2 (audio continues)"
+          ffmpeg -y -to "$S2" -i work/outro_src.mp4 -an -vf "scale=1920:1080,fps=30" \
+            -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p work/ovv.mp4
+          ffmpeg -y -t 3.5 -i work/card.mp4 -an -vf "scale=1920:1080,fps=30" \
+            -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p work/cardv.mp4
+          printf "file 'ovv.mp4'\nfile 'cardv.mp4'\n" > work/cc.txt
+          ffmpeg -y -f concat -safe 0 -i work/cc.txt -c copy work/full_v.mp4
+          AD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 work/outro_src.mp4)
+          FST=$(python3 -c "print(max(0.5, float('$AD') - 0.6))")
+          ffmpeg -y -i work/full_v.mp4 -i work/outro_src.mp4 -filter_complex \
+            "[1:a]aresample=48000,afade=t=out:st=${FST}:d=0.6,apad[a]" \
+            -map 0:v -map "[a]" -shortest -c:v copy -c:a aac -b:a 256k \
+            -movflags +faststart deliverables/bookends/LLA_OUTRO_FINAL.mp4
+          # films reuse: same video cut with its own audio to S2
+          ffmpeg -y -to "$S2" -i work/outro_src.mp4 -vf "scale=1920:1080,fps=30" \
+            -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 production/footage/clips/outro_proc.mp4
           ffprobe -v error -show_entries format=duration -of csv=p=0 deliverables/bookends/LLA_INTRO_FINAL.mp4
           ffprobe -v error -show_entries format=duration -of csv=p=0 deliverables/bookends/LLA_OUTRO_FINAL.mp4
       - name: Commit
