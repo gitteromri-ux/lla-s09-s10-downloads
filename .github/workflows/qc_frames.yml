@@ -29,12 +29,17 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
           TS=$(date +%s)
           F='${{ github.event.inputs.file }}'
-          curl -sL --fail "https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/deliverables/${F}?nc=${TS}" -o vid.mp4
+          case "$F" in
+            */*) P="$F" ;;
+            *)   P="deliverables/$F" ;;
+          esac
+          curl -sL --fail "https://media.githubusercontent.com/media/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/${P}?nc=${TS}" -o vid.mp4
           mkdir -p deliverables/qc_ad
           rm -f deliverables/qc_ad/*.png
           IFS=',' read -ra TT <<< '${{ github.event.inputs.times }}'
+          B=$(basename "$F" .mp4)
           for t in "${TT[@]}"; do
-            ffmpeg -y -ss "$t" -i vid.mp4 -frames:v 1 "deliverables/qc_ad/${F%.mp4}_t${t}.png"
+            ffmpeg -y -ss "$t" -i vid.mp4 -frames:v 1 "deliverables/qc_ad/${B}_t${t}.png"
           done
           ffprobe -v error -show_entries format=duration -of csv=p=0 vid.mp4
           ffmpeg -i vid.mp4 -af volumedetect -f null - 2>&1 | grep -E "mean_volume|max_volume" || true
