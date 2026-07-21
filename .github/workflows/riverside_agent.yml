@@ -4,9 +4,25 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "probe | login_configure | join_guest"
+        description: "probe | request_reset | set_password | configure | join_guest"
         required: true
         default: "probe"
+      email:
+        description: "Account email"
+        required: false
+        default: ""
+      reset_link:
+        description: "Password reset link (set_password)"
+        required: false
+        default: ""
+      password:
+        description: "Password (set_password/configure) - disposable account only"
+        required: false
+        default: ""
+      guest_link:
+        description: "Studio guest link (join_guest)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -26,16 +42,24 @@ jobs:
       - name: Run agent
         env:
           RS_ACTION: ${{ github.event.inputs.action }}
-          RS_EMAIL: ${{ secrets.RS_EMAIL }}
-          RS_PASSWORD: ${{ secrets.RS_PASSWORD }}
+          RS_EMAIL: ${{ github.event.inputs.email }}
+          RS_RESET: ${{ github.event.inputs.reset_link }}
+          RS_PASSWORD: ${{ github.event.inputs.password }}
+          RS_GUEST: ${{ github.event.inputs.guest_link }}
         run: |
           mkdir -p deliverables/riverside_agent
+          rm -f deliverables/riverside_agent/*.png deliverables/riverside_agent/*.txt
           python3 - <<'PY'
-          import os, time
+          import os, time, json
           from playwright.sync_api import sync_playwright
 
           ACTION = os.environ.get("RS_ACTION", "probe")
+          EMAIL = os.environ.get("RS_EMAIL", "")
+          RESET = os.environ.get("RS_RESET", "")
+          PASSWORD = os.environ.get("RS_PASSWORD", "")
+          GUEST = os.environ.get("RS_GUEST", "")
           OUT = "deliverables/riverside_agent"
+          n = [0]
 
           with sync_playwright() as p:
               b = p.chromium.launch(args=[
@@ -47,18 +71,96 @@ jobs:
               pg = ctx.new_page()
 
               def snap(name):
-                  pg.screenshot(path=f"{OUT}/{name}.png", full_page=False)
-                  print("snap:", name, "| url:", pg.url)
+                  n[0] += 1
+                  fn = f"{n[0]:02d}_{name}"
+                  try: pg.screenshot(path=f"{OUT}/{fn}.png", full_page=False)
+                  except Exception as e: print("snap fail:", e)
+                  print("snap:", fn, "| url:", pg.url)
 
-              if ACTION == "probe":
-                  pg.goto("https://riverside.com/", timeout=60000)
-                  pg.wait_for_timeout(4000); snap("01_home")
+              def dump_texts(name):
+                  try:
+                      texts = pg.evaluate("""() => {
+                        const els = document.querySelectorAll('button, a, [role=button], input, [role=menuitem], [role=tab]');
+                        return Array.from(els).slice(0,300).map(e => ({
+                          tag: e.tagName, text: (e.innerText||e.value||e.placeholder||'').trim().slice(0,80),
+                          href: e.href||'', type: e.type||''
+                        })).filter(x => x.text || x.href);
+                      }""")
+                      with open(f"{OUT}/{name}_elements.txt","w") as f:
+                          for t in texts: f.write(json.dumps(t)+"\n")
+                  except Exception as e: print("dump fail:", e)
+
+              def click_text(rx, timeout=8000):
+                  el = pg.get_by_text(rx, exact=False).first
+                  el.click(timeout=timeout)
+
+              if ACTION == "request_reset":
                   pg.goto("https://riverside.com/login", timeout=60000)
-                  pg.wait_for_timeout(4000); snap("02_login")
-                  # try the dashboard host too
-                  pg.goto("https://app.riverside.fm/login", timeout=60000)
-                  pg.wait_for_timeout(4000); snap("03_app_login")
-                  print("PROBE OK")
+                  pg.wait_for_timeout(3500); snap("login"); dump_texts("login")
+                  try:
+                      pg.get_by_text("Forgot password", exact=False).first.click(timeout=8000)
+                  except Exception:
+                      pg.goto("https://riverside.com/forgot-password", timeout=60000)
+                  pg.wait_for_timeout(2500); snap("forgot_page"); dump_texts("forgot_page")
+                  try:
+                      pg.locator("input[type=email], input[name=email], input[placeholder*=mail i]").first.fill(EMAIL)
+                      snap("email_filled")
+                      pg.locator("button[type=submit], button:has-text('Reset'), button:has-text('Send')").first.click(timeout=8000)
+                      pg.wait_for_timeout(3500); snap("reset_sent")
+                      print("RESET REQUESTED")
+                  except Exception as e:
+                      print("reset flow error:", e); snap("reset_error")
+
+              elif ACTION == "set_password":
+                  pg.goto(RESET, timeout=60000)
+                  pg.wait_for_timeout(3500); snap("reset_page"); dump_texts("reset_page")
+                  try:
+                      fields = pg.locator("input[type=password]")
+                      cnt = fields.count()
+                      for i in range(cnt): fields.nth(i).fill(PASSWORD)
+                      snap("password_filled")
+                      pg.locator("button[type=submit], button:has-text('Reset'), button:has-text('Save'), button:has-text('Set'), button:has-text('Change')").first.click(timeout=8000)
+                      pg.wait_for_timeout(5000); snap("password_set"); dump_texts("after_set")
+                      print("PASSWORD SET")
+                  except Exception as e:
+                      print("set flow error:", e); snap("set_error")
+
+              elif ACTION == "configure":
+                  pg.goto("https://riverside.com/login", timeout=60000)
+                  pg.wait_for_timeout(3000); snap("login")
+                  pg.locator("input[type=email], input[name=email]").first.fill(EMAIL)
+                  pg.locator("input[type=password]").first.fill(PASSWORD)
+                  pg.locator("button:has-text('Log in'), button[type=submit]").first.click(timeout=8000)
+                  pg.wait_for_timeout(8000); snap("dashboard"); dump_texts("dashboard")
+                  # walk into the first studio / settings; screenshots let the operator steer next run
+                  for label in ("Go to studio", "Open studio", "Studio"):
+                      try:
+                          pg.get_by_text(label, exact=False).first.click(timeout=5000)
+                          pg.wait_for_timeout(6000); snap("studio"); dump_texts("studio")
+                          break
+                      except Exception: continue
+                  snap("final_state"); dump_texts("final_state")
+
+              elif ACTION == "join_guest":
+                  pg.goto(GUEST, timeout=60000)
+                  pg.wait_for_timeout(5000); snap("guest_lobby"); dump_texts("guest_lobby")
+                  try:
+                      pg.locator("input").first.fill("LLA Agent")
+                      snap("name_filled")
+                  except Exception: pass
+                  for label in ("Join", "Request", "Continue", "Enter"):
+                      try:
+                          pg.get_by_text(label, exact=False).first.click(timeout=5000)
+                          pg.wait_for_timeout(6000); snap(f"after_{label.lower()}")
+                      except Exception: continue
+                  # stay in the call for 4 minutes for the live test
+                  for k in range(8):
+                      pg.wait_for_timeout(30000); snap(f"incall_{k}")
+                  print("GUEST SESSION DONE")
+
+              else:
+                  pg.goto("https://riverside.com/login", timeout=60000)
+                  pg.wait_for_timeout(4000); snap("probe_login")
               b.close()
           PY
           ls -la deliverables/riverside_agent
@@ -68,7 +170,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add deliverables/riverside_agent
-          git commit -m "Riverside agent: proof screenshots" || echo "no changes"
+          git commit -m "Riverside agent: step proof" || echo "no changes"
           for n in 1 2 3 4; do
             git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))
           done
