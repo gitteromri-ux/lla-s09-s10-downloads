@@ -1,0 +1,48 @@
+name: Meta formats (1x1 + 9x16 canvases)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  formats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Build sizes
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          M="https://media.githubusercontent.com/media/${{ github.repository }}/main"
+          for FILM in Courtney_HERO_BRAND Courtney_META60_BRAND; do
+            curl -sS -L --fail --retry 4 "$M/deliverables/${FILM}.mp4" -o src.mp4
+            D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 src.mp4)
+            # 9:16 Stories/Reels: film upper-centered on brand navy
+            ffmpeg -y -loglevel error -i src.mp4 -f lavfi -t "$D" -i "color=0x0E1F48:s=1080x1920:r=30" \
+              -filter_complex "[0:v]scale=1080:607:flags=lanczos[f];[1:v][f]overlay=x=0:y=556:shortest=1,format=yuv420p[v]" \
+              -map "[v]" -map 0:a -c:v libx264 -crf 17 -preset medium -c:a aac -b:a 256k \
+              -movflags +faststart "${FILM}_9x16.mp4"
+            # 1:1 feed: film centered on brand navy
+            ffmpeg -y -loglevel error -i src.mp4 -f lavfi -t "$D" -i "color=0x0E1F48:s=1080x1080:r=30" \
+              -filter_complex "[0:v]scale=1080:607:flags=lanczos[f];[1:v][f]overlay=x=0:y=236:shortest=1,format=yuv420p[v]" \
+              -map "[v]" -map 0:a -c:v libx264 -crf 17 -preset medium -c:a aac -b:a 256k \
+              -movflags +faststart "${FILM}_1x1.mp4"
+            ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "${FILM}_9x16.mp4"
+          done
+      - name: Commit
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          mkdir -p deliverables/meta
+          cp *_9x16.mp4 *_1x1.mp4 deliverables/meta/
+          git add .gitattributes deliverables/meta
+          git commit -m "META-READY: 9x16 + 1x1 canvases for HERO and META60"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
