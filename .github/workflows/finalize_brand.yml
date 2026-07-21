@@ -54,7 +54,7 @@ jobs:
           # 4) fast cut to premium end card, music bed swell under it
           ffmpeg -y -loglevel error -loop 1 -t 4.5 -i assets/brand_v3/endcard_v3.png \
             -ss 30 -t 4.5 -stream_loop -1 -i assets/music_bed_0717.mp3 \
-            -vf "scale=1920:1080,fps=30,fade=t=out:st=4.1:d=0.4" \
+            -vf "scale=2400:1350,zoompan=z='1+0.05*on/135':d=1:x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':s=1920x1080:fps=30,fade=t=out:st=4.1:d=0.4" \
             -map 0:v -map 1:a -c:v libx264 -crf 16 -preset fast -pix_fmt yuv420p \
             -c:a aac -ar 48000 -ac 2 -af "volume=0.5,afade=t=in:d=0.15,afade=t=out:st=3.6:d=0.9" -shortest seg_end.mp4
           printf "file '%s/seg_intro.mp4'\nfile '%s/seg_film.mp4'\nfile '%s/seg_outro.mp4'\nfile '%s/seg_end.mp4'\n" "$PWD" "$PWD" "$PWD" "$PWD" > list.txt
