@@ -60,8 +60,8 @@ jobs:
           words = [(w["s"], w["e"], w["w"].strip()) for seg in T for w in seg["words"]]
           FF="ffmpeg"; W,H,FPS=1920,1080,30
           os.makedirs("seg", exist_ok=True)
-          GRADE="curves=preset=medium_contrast,eq=contrast=1.10:saturation=1.24:brightness=0.015,colorbalance=rm=.045:bm=-.045,vignette=PI/5.4"
-          TIGHT="crop=1680:945:(iw-1680)/2:(ih-945)*0.30,scale=1920:1080:flags=lanczos,"
+          GRADE="curves=preset=medium_contrast,eq=contrast=1.05:saturation=1.08:brightness=0.01,colorbalance=rm=.02:bm=-.02,vignette=PI/6.2"
+          TIGHT="crop=1360:765:(iw-1360)/2:(ih-765)*0.16,scale=1920:1080:flags=lanczos,"
           ACTS=[
             dict(name="hook", s=39.60, e=43.00, heads=[], emph=[],
                  broll=[("noise_screens",41.00,1.90)]),
@@ -91,7 +91,8 @@ jobs:
           idx=0; tight=False; PLAN=[]
           def enc_her(ss,dur,tg):
               global idx; idx+=1; PLAN.append(dur)
-              vf=(TIGHT if tg else "")+GRADE+f",scale={W}:{H},fps={FPS}"
+              WIDEC="crop=1440:810:(iw-1440)/2:(ih-810)*0.10,scale=1920:1080:flags=lanczos,"
+              vf=(TIGHT if tg else WIDEC)+GRADE+f",scale={W}:{H},fps={FPS}"
               subprocess.run([FF,"-y","-loglevel","error","-ss",str(ss),"-t",str(dur),"-i","base.mp4",
                 "-vf",vf,"-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
@@ -191,7 +192,7 @@ jobs:
                 "-frames:v","1","hold.png"],check=True)
               subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i","hold.png",
                 "-ss",str(a_ss),"-t",str(dur),"-i","base.mp4","-map","0:v","-map","1:a",
-                "-vf",GRADE+f",scale={W}:{H},fps={FPS}",
+                "-vf","crop=1440:810:(iw-1440)/2:(ih-810)*0.10,scale=1920:1080:flags=lanczos,"+GRADE+f",scale={W}:{H},fps={FPS}",
                 "-af","afade=t=in:d=0.02",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
