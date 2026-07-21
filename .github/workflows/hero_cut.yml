@@ -1,0 +1,369 @@
+name: HERO cut (Netflix-promo 85s)
+
+on:
+  workflow_dispatch:
+    inputs:
+      clean_run_id:
+        description: "Run id of clean assembly artifact"
+        required: false
+        default: "29731883948"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: Courtney_CINEMA_FINAL_0717
+          run-id: ${{ github.event.inputs.clean_run_id }}
+          github-token: ${{ github.token }}
+          path: art
+      - name: Setup
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          pip3 install --quiet fonttools pillow
+          cp art/Courtney_CINEMA_FINAL_0717.mp4 base.mp4
+          mkdir -p fonts
+          curl -sL --fail -o Fraunces_var.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
+          curl -sL --fail -o Inter_var.ttf "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
+          fonttools varLib.instancer -q -o fonts/Inter-Bold.ttf Inter_var.ttf wght=700 opsz=32
+          fonttools varLib.instancer -q -o fonts/Fraunces-Display.ttf Fraunces_var.ttf wght=480 opsz=144 SOFT=0 WONK=0
+          # continuous room tone bed (quiet stretch of the raw)
+          ffmpeg -y -loglevel error -ss 102.30 -t 3.20 -i base.mp4 -vn -c:a pcm_s16le tone.wav
+          A="https://media.githubusercontent.com/media/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
+          R="https://raw.githubusercontent.com/${{ github.repository }}/claude/video-0717-background-replace-qm11te/production"
+          for c in cta1 cta2 cta3; do
+            cp "assets/brand_v3/${c}_v2.png" "${c}.png"
+          done
+          cp assets/brand_v3/endcard_v3.png end.png
+          for c in site_yoga site_nutrition site_sleep swimmer_dawn site_supplements site_wearables data_curve oximeter_data; do
+            curl -sS -L --fail --retry 4 "$A/footage/clips/$c.mp4" -o "$c.mp4"
+          done
+          # client-supplied insert: longevity-noise screens montage (ADD-1, 8K)
+          curl -sS -L --fail --retry 4 \
+            "https://media.githubusercontent.com/media/${{ github.repository }}/main/deliverables/fetched/asset_1.mp4" -o noise_screens.mp4
+      - name: Build cut + captions + headlines
+        run: |
+          set -e
+          python3 - <<'PY'
+          import json, subprocess, os
+          T = json.load(open("production/transcript_0717.json"))
+          words = [(w["s"], w["e"], w["w"].strip()) for seg in T for w in seg["words"]]
+          FF="ffmpeg"; W,H,FPS=1920,1080,30
+          os.makedirs("seg", exist_ok=True)
+          GRADE="curves=preset=medium_contrast,eq=contrast=1.10:saturation=1.24:brightness=0.015,colorbalance=rm=.045:bm=-.045,vignette=PI/5.4"
+          TIGHT="crop=1680:945:(iw-1680)/2:(ih-945)*0.30,scale=1920:1080:flags=lanczos,"
+          ACTS=[
+            dict(name="hook", s=39.60, e=52.90,
+                 heads=[(44.90,"LONGEVITY ADVICE IS EVERYWHERE.")],
+                 emph=[44.16,50.52],
+                 broll=[("noise_screens",44.90,4.20)]),
+            dict(name="path", s=58.60, e=66.60,
+                 heads=[(58.74,"YOUR DIRECT PATH TO LONGEVITY")],
+                 emph=[63.90], broll=[]),
+            dict(name="pillars", s=127.40, e=146.20,
+                 heads=[(127.50,"THE SIX PILLARS OF A LONGER LIFE")],
+                 emph=[133.00],
+                 broll=[("site_nutrition",137.10,1.90),("site_sleep",139.00,1.80),
+                        ("swimmer_dawn",140.80,1.80),("site_supplements",142.60,1.90),
+                        ("site_wearables",144.50,1.70)]),
+            dict(name="blueprint", s=157.20, e=160.70,
+                 heads=[], emph=[157.28], broll=[]),
+            dict(name="proof", s=171.10, e=182.60,
+                 heads=[(171.22,"+14 YEARS LIFE TRAJECTORY")],
+                 emph=[177.40],
+                 broll=[("data_curve",171.22,4.20)]),
+            dict(name="teach", s=185.90, e=189.80,
+                 heads=[], emph=[186.02], broll=[]),
+            dict(name="close", s=394.30, e=396.90,
+                 heads=[(394.44,"YOUR LONGEVITY BLUEPRINT")],
+                 emph=[394.44], broll=[]),
+            dict(name="close2", s=397.60, e=400.40, heads=[], emph=[397.72], broll=[]),
+          ]
+          CARDS_AFTER={"path":"cta1","blueprint":"cta2","teach":"cta3"}
+          gaps=[]
+          for i in range(len(words)-1):
+              g0,g1 = words[i][1], words[i+1][0]
+              if g1-g0 >= 0.10: gaps.append((g0+g1)/2)
+          def snap(t, lo, hi):
+              c=[g for g in gaps if lo< g < hi]
+              return min(c, key=lambda g: abs(g-t)) if c else t
+          idx=0; tight=False; PLAN=[]
+          def enc_her(ss,dur,tg):
+              global idx; idx+=1; PLAN.append(dur)
+              vf=(TIGHT if tg else "")+GRADE+f",scale={W}:{H},fps={FPS}"
+              subprocess.run([FF,"-y","-loglevel","error","-ss",str(ss),"-t",str(dur),"-i","base.mp4",
+                "-vf",vf,"-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
+          def enc_broll(clip,dur,a_ss):
+              global idx; idx+=1; PLAN.append(dur)
+              if clip=="noise_screens":
+                  vf=(f"crop=w=iw*0.80:h=ih*0.80:x=(iw-ow)*0.5*min(1\\,t/{dur}):y=(ih-oh)*0.25,"
+                      f"scale={W}:{H}:flags=lanczos,fps={FPS},"+GRADE)
+              else:
+                  vf=(f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},"
+                      +GRADE+(",eq=brightness=0.10:saturation=1.05" if clip=="oximeter_data" else ",eq=brightness=0.04")+",unsharp=5:5:0.4")
+              subprocess.run([FF,"-y","-loglevel","error","-stream_loop","-1","-t",str(dur),"-i",f"{clip}.mp4",
+                "-ss",str(a_ss),"-t",str(dur),"-i","base.mp4","-map","0:v","-map","1:a",
+                "-vf",vf,
+                "-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
+          def enc_card(png,dur):
+              global idx; idx+=1; PLAN.append(dur)
+              subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i",png,
+                "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
+                "-vf",f"scale={W}:{H},fps={FPS},fade=t=in:d=0.45,fade=t=out:st={dur-0.45}:d=0.45",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-shortest",f"seg/{idx:03d}.mp4"],check=True)
+          from PIL import Image, ImageDraw, ImageFont, ImageFilter
+          NAVY=(14,31,72); DEEP=(8,22,52); BONE=(245,242,234); ACC=(143,180,245); MUT=(138,147,168)
+          bg=Image.new("RGB",(W,H)); px=bg.load()
+          for yy in range(H):
+              f=yy/H; row=tuple(int(NAVY[i]+(DEEP[i]-NAVY[i])*f) for i in range(3))
+              for xx in range(W): px[xx,yy]=row
+          vig=Image.new("L",(W,H),0); dv=ImageDraw.Draw(vig)
+          dv.ellipse([-W*0.25,-H*0.35,W*1.25,H*1.35],fill=70)
+          vig=vig.filter(ImageFilter.GaussianBlur(220))
+          bg=Image.composite(bg,Image.new("RGB",(W,H),(4,12,30)),vig)
+          bg.save("cardbg.png")
+          F_DISP=lambda s: ImageFont.truetype("fonts/Fraunces-Display.ttf",s)
+          F_INT=lambda s: ImageFont.truetype("fonts/Inter-Bold.ttf",s)
+          def strip_png(spans,font,tag,strike_idx=None,pad=30):
+              probe=Image.new("RGBA",(10,10)); dp=ImageDraw.Draw(probe)
+              ws=[dp.textlength(t,font=font) for t,_ in spans]
+              asc,desc=font.getmetrics()
+              Wt=int(sum(ws))+pad*2; Ht=asc+desc+pad*2
+              im=Image.new("RGBA",(Wt,Ht),(0,0,0,0)); d=ImageDraw.Draw(im)
+              x=pad
+              for k,(t,col) in enumerate(spans):
+                  d.text((x,pad),t,font=font,fill=col+(255,))
+                  if strike_idx is not None and k==strike_idx:
+                      ym=pad+int(asc*0.72); d.line([x+6,ym,x+ws[k]-6,ym],fill=col+(255,),width=9)
+                  x+=ws[k]
+              im.save(f"{tag}.png"); return Wt,Ht
+          CARD_SPECS={
+            "cta1":[("k","LONGEVITY LIFE ACADEMY",None),
+                    ("m",[("Become the person",BONE)],None),
+                    ("m",[("who ages slower.",ACC)],None)],
+            "cta2":[("k","18 LIVE SESSIONS \u00b7 SIX PILLARS",None),
+                    ("m",[("Master the path,",BONE)],None),
+                    ("m",[("week by week.",ACC)],None)],
+            "cta3":[("k","20% OFF \u00b7 THIS WEEK ONLY",None),
+                    ("m",[("$1,500",MUT),("  $1,200",BONE)],0),
+                    ("m",[("Claim your seat.",ACC)],None)],
+          }
+          card_idxs=[]
+          def enc_anim_card(cname,dur=2.6):
+              global idx; idx+=1; PLAN.append(dur)
+              spec=CARD_SPECS[cname]; layers=[]
+              for j,item in enumerate(spec):
+                  kind,payload,sk=item
+                  if kind=="k":
+                      txt=" ".join(payload)
+                      wpx,hpx=strip_png([(txt,ACC)],F_INT(34),f"c_{cname}_{j}")
+                  else:
+                      wpx,hpx=strip_png(payload,F_DISP(150),f"c_{cname}_{j}",strike_idx=sk)
+                  layers.append((f"c_{cname}_{j}.png",wpx,hpx))
+              total=sum(h for _,_,h in layers)+2*24
+              y0=(H-total)//2
+              NF=int(dur*FPS)
+              ins=["-framerate","30","-loop","1","-t",str(dur),"-i","cardbg.png"]
+              fl=[f"[0:v]scale=2200:1238,zoompan=z='1+0.04*on/{NF}':d=1:x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':s={W}x{H}:fps={FPS}[bg]"]
+              prev="bg"; y=y0
+              for j,(fn,wpx,hpx) in enumerate(layers):
+                  ins+=["-framerate","30","-loop","1","-t",str(dur),"-i",fn]
+                  st=0.12+j*0.17
+                  fl.append(f"[{j+1}:v]format=rgba,fade=t=in:st={st}:d=0.32:alpha=1,fade=t=out:st={dur-0.30}:d=0.28:alpha=1[l{j}]")
+                  fl.append(f"[{prev}][l{j}]overlay=x=(W-w)/2:y='{y}+42*exp(-9*max(0\\,t-{st}))'[o{j}]")
+                  prev=f"o{j}"; y+=hpx+24
+              fl.append(f"[{prev}]fade=t=in:d=0.20:color=0x0E1F48,fade=t=out:st={dur-0.24}:d=0.24:color=0x0E1F48,format=yuv420p[v]")
+              subprocess.run([FF,"-y","-loglevel","error"]+ins+
+                ["-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
+                 "-filter_complex",";".join(fl),"-map","[v]","-map",f"{len(layers)+1}:a",
+                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                 "-c:a","aac","-shortest",f"seg/{idx:03d}.mp4"],check=True)
+              card_idxs.append(idx)
+          def enc_freeze(frame_at,a_ss,dur):
+              global idx; idx+=1; PLAN.append(dur)
+              subprocess.run([FF,"-y","-loglevel","error","-ss",str(frame_at),"-i","base.mp4",
+                "-frames:v","1","hold.png"],check=True)
+              subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i","hold.png",
+                "-ss",str(a_ss),"-t",str(dur),"-i","base.mp4","-map","0:v","-map","1:a",
+                "-vf",GRADE+f",scale={W}:{H},fps={FPS}",
+                "-af","afade=t=in:d=0.02",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
+          def her_range(a,b,emph,force_tight_from=None,fw=False):
+              global tight
+              pts=sorted([t for t in emph if a+0.6 < t < b-0.5])
+              marks=[a]+pts+[b]
+              for i in range(len(marks)-1):
+                  x0,x1=marks[i],marks[i+1]
+                  cur=x0
+                  while x1-cur > 3.2:
+                      nxt=snap(cur+2.1, cur+1.1, x1-0.6)
+                      if nxt<=cur+0.5: break
+                      tg = False if fw else tight
+                      enc_her(cur, nxt-cur, tg); tight=not tight; cur=nxt
+                  if x1-cur>0.25:
+                      tg = False if fw else tight
+                      enc_her(cur, x1-cur, tg); tight=not tight
+          out_t=0.0; act_map=[]; heads=[]; music_marks={}
+          enc_card("end.png",2.2); out_t+=2.2
+          for act in ACTS:
+              music_marks[act["name"]]=out_t
+              for ht,txt in act["heads"]:
+                  heads.append((out_t + max(0.15, ht-act["s"]), txt))
+              ftf=None; fw = act["name"] in ("close","close2")
+              cur=act["s"]
+              for clip,bs,bd in sorted(act["broll"], key=lambda b:b[1]):
+                  her_range(cur, bs, act["emph"], ftf, fw)
+                  enc_broll(clip, bd, bs); cur=bs+bd
+              her_range(cur, act["e"], act["emph"], ftf, fw)
+              if act["name"]=="close2":
+                  enc_freeze(400.30, 400.40, 1.70)
+                  act_map.append((act["s"], 402.10, out_t))
+                  out_t += (act["e"]-act["s"]) + 1.70
+              else:
+                  act_map.append((act["s"],act["e"],out_t))
+                  out_t += act["e"]-act["s"]
+              if act["name"]=="close":
+                  music_marks["monta"]=out_t
+                  for mclip,md in [("swimmer_dawn",0.70),("site_yoga",0.70),("oximeter_data",0.70)]:
+                      enc_broll(mclip, md, 103.0); out_t+=md
+              if act["name"] in CARDS_AFTER:
+                  enc_anim_card(CARDS_AFTER[act["name"]]); out_t+=2.6
+          music_marks["end"]=out_t
+          enc_card("end.png",4.2); out_t+=4.2
+          def dipfade(k,mode):
+              fn=f"seg/{k:03d}.mp4"
+              d=float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",fn],capture_output=True,text=True).stdout)
+              vf=(f"fade=t=out:st={max(0,d-0.16)}:d=0.16:color=0x0E1F48" if mode=="out" else "fade=t=in:d=0.16:color=0x0E1F48")
+              subprocess.run([FF,"-y","-loglevel","error","-i",fn,"-vf",vf,"-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p","-c:a","copy","tmpseg.mp4"],check=True)
+              os.replace("tmpseg.mp4",fn)
+          for c in card_idxs:
+              if c-1>=1: dipfade(c-1,"out")
+              if c+1<=idx: dipfade(c+1,"in")
+          with open("list.txt","w") as f:
+              for k in range(1,idx+1): f.write(f"file 'seg/{k:03d}.mp4'\n")
+          subprocess.run([FF,"-y","-loglevel","error","-f","concat","-safe","0","-i","list.txt","-c","copy","cut.mp4"],check=True)
+          import bisect
+          real=[]
+          for k in range(1,idx+1):
+              d=float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",f"seg/{k:03d}.mp4"],capture_output=True,text=True).stdout)
+              real.append(d)
+          pcum=[0.0]; rcum=[0.0]
+          for p,r in zip(PLAN,real): pcum.append(pcum[-1]+p); rcum.append(rcum[-1]+r)
+          def remap(t):
+              i=max(0,bisect.bisect_right(pcum,t)-1); i=min(i,len(real)-1)
+              return rcum[i]+min(max(0.0,t-pcum[i]), real[i])
+          print("plan total",round(pcum[-1],2),"real total",round(rcum[-1],2),"drift",round(rcum[-1]-pcum[-1],2))
+          def src2out(t):
+              for s,e,o in act_map:
+                  if s <= t <= e: return o + (t-s)
+              for s,e,o in act_map:
+                  if s-0.3 <= t <= e+0.3: return o + (t-s)
+              return None
+          HILITE={"direct","path","six","pillars","18","14","blueprint","class","session","seat","courtney","longevity","academy","harvard"}
+          BLUE=r"{\c&HFF6E00&}"; WHITE=r"{\c&HFFFFFF&}"
+          lines=[]; cur=[]; t0=None
+          for s,e,wd in words:
+              o=src2out(s)
+              if o is None:
+                  if cur: lines.append((t0,last_e,cur)); cur=[]; t0=None
+                  continue
+              if t0 is None: t0=o
+              cur.append(wd); last_e=src2out(e) or (o+0.4)
+              if (wd and wd[-1] in ".!?") or (wd and wd[-1] in ",;" and len(cur)>=2) or len(cur)>=6:
+                  lines.append((t0,last_e,cur)); cur=[]; t0=None
+          if cur: lines.append((t0,last_e,cur))
+          def ts(t): return f"{int(t//3600)}:{int(t%3600//60):02d}:{t%60:05.2f}"
+          ass=("[Script Info]\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\n"
+            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+            "Style: Cap,Inter,96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H98000000,0,0,0,0,100,100,0.2,0,1,0,2.2,2,90,90,205,1\n"
+            "Style: Head,Fraunces,72,&H00EAF2F5,&H00EAF2F5,&H8A341608,&H8A341608,0,0,0,0,100,100,9,0,3,13,0,8,60,60,42,1\n\n"
+            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+          sent=True
+          for st,en,ws in lines:
+              txt=" ".join((BLUE+w+WHITE) if w.strip(".,!?;").lower() in HILITE else w for w in ws)
+              cap=txt[0].upper()+txt[1:] if sent and txt and txt[0].isalpha() else txt
+              sent=bool(ws and ws[-1] and ws[-1][-1] in ".!?")
+              rs,re=remap(st),remap(en)
+              ass+=f"Dialogue: 0,{ts(rs)},{ts(max(re,rs+0.7))},Cap,,0,0,0,,{{\\fad(110,90)}}{cap}\n"
+          for ht,txt in heads:
+              rh=remap(ht)
+              ass+=f"Dialogue: 1,{ts(rh)},{ts(rh+3.2)},Head,,0,0,0,,{{\\fad(380,380)\\fsp7\\t(0,600,\\fsp10)}}{txt}\n"
+          open("caps.ass","w").write(ass)
+          json.dump({k:remap(v) for k,v in music_marks.items()}, open("marks.json","w"))
+          print("segments:",idx,"out:",round(out_t,1),"caps:",len(lines))
+          PY
+      - name: Final encode (captions + music arc + room tone)
+        run: |
+          set -e
+          python3 - <<'PY'
+          import json, subprocess
+          mk=json.load(open("marks.json"))
+          D=float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0","cut.mp4"],capture_output=True,text=True).stdout)
+          tp,tm,te = mk["proof"], mk.get("monta",mk["close"]), mk["end"]
+          vol=(f"if(lt(t,{tp}),0.26,"
+               f"if(lt(t,{tm}),0.26+0.16*min(1,(t-{tp})/2.5),"
+               f"if(lt(t,{te}),0.42+0.30*min(1,(t-{tm})/1.8),0.75)))")
+          cmd=["ffmpeg","-y","-loglevel","error","-i","cut.mp4",
+            "-stream_loop","-1","-i","assets/music_bed_0717.mp3",
+            "-stream_loop","-1","-i","tone.wav",
+            "-filter_complex",
+            f"[0:v]subtitles=caps.ass:fontsdir=fonts,noise=alls=5:allf=t[vout];"
+            f"[0:a]asplit=2[voice][sc];"
+            f"[1:a]volume=volume='{vol}':eval=frame,afade=t=out:st={D-0.9}:d=0.9[m1];"
+            f"[m1][sc]sidechaincompress=threshold=0.024:ratio=5:attack=25:release=380[mus];"
+            f"[2:a]volume=0.5,afade=t=out:st={D-1.5}:d=1.5[tone];"
+            f"[voice][mus][tone]amix=inputs=3:duration=first:normalize=0[aout]",
+            "-map","[vout]","-map","[aout]","-c:v","libx264","-crf","16","-preset","medium",
+            "-pix_fmt","yuv420p","-c:a","aac","-b:a","256k","-movflags","+faststart","Courtney_HERO.mp4"]
+          subprocess.run(cmd,check=True)
+          subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size","-of","default=noprint_wrappers=1","Courtney_HERO.mp4"],check=True)
+          PY
+          mkdir -p deliverables/qc_cinema
+          for p in 1 4 10 16 24 34 44 52 62 72 82 88 94; do
+            ffmpeg -y -loglevel error -ss "$p" -i Courtney_HERO.mp4 -frames:v 1 "deliverables/qc_cinema/ad90_${p}.jpg" || true
+          done
+      - name: Publish to finalcut page
+        run: |
+          set -e
+          python3 - <<'PY'
+          html=open('finalcut/index.html').read()
+          if 'Courtney_HERO' not in html:
+              url="https://media.githubusercontent.com/media/gitteromri-ux/lla-s09-s10-downloads/main/deliverables/Courtney_HERO.mp4"
+              sec=('\n<h2>&#127942; AD90 · PAID META CUT <span class="badge">90 SECONDS</span></h2>\n'
+                   '<p class="note">Final takes only · act headlines · large captions · word-linked footage · music arc to close</p>\n'
+                   '<div class="card">\n<h3>Courtney · AD90 Paid Cut</h3><div class="meta">1080p · LEAD-GEN MASTER</div>\n'
+                   f'<video src="{url}" autoplay muted loop playsinline controls preload="metadata"></video>\n'
+                   f'<br><a class="btn" href="{url}" download>&#11015; Download AD90</a>\n</div>\n')
+              i=html.find('<h2>')
+              open('finalcut/index.html','w').write(html[:i]+sec+html[i:])
+              print("page card added")
+          PY
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp Courtney_HERO.mp4 deliverables/
+          git add .gitattributes finalcut/index.html deliverables/Courtney_HERO.mp4 deliverables/qc_cinema
+          git commit -m "AD90: 90s paid Meta cut"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Courtney_HERO
+          path: Courtney_HERO.mp4
+          if-no-files-found: error
