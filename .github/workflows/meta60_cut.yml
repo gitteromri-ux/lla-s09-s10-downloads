@@ -63,24 +63,34 @@ jobs:
           GRADE="eq=contrast=1.03:saturation=1.02:brightness=0.035:gamma=1.05,colorbalance=rm=.01:bm=-.01"
           TIGHT="crop=1680:945:(iw-1680)/2:(ih-945)*0.30,scale=1920:1080:flags=lanczos,"
           ACTS=[
-            dict(name="hook", s=39.60, e=43.00, heads=[], emph=[],
-                 broll=[("noise_screens",41.00,1.90)]),
-            dict(name="path", s=58.60, e=66.60,
-                 heads=[(58.74,"YOUR DIRECT PATH TO LONGEVITY")],
-                 emph=[63.90], broll=[]),
-            dict(name="pillars2", s=137.00, e=146.20,
-                 heads=[(137.10,"THE SIX PILLARS OF A LONGER LIFE")],
-                 emph=[],
-                 broll=[("site_nutrition",137.05,1.00),("swimmer_dawn",139.10,1.20),
-                        ("site_supplements",140.60,1.75),("oximeter_data",144.05,2.00)]),
-            dict(name="proof", s=171.10, e=182.60,
-                 heads=[(171.22,"+14 YEARS LIFE TRAJECTORY")],
-                 emph=[177.40],
-                 broll=[("data_curve",171.22,4.20)]),
-            dict(name="close", s=394.30, e=396.90, heads=[], emph=[394.44], broll=[]),
-            dict(name="close2", s=397.60, e=400.40, heads=[], emph=[397.72], broll=[]),
+            dict(name="hook",   s=39.60, e=70.60,
+                 heads=[(44.90,"LONGEVITY ADVICE IS EVERYWHERE."),
+                        (58.74,"YOUR DIRECT PATH TO LONGEVITY")],
+                 emph=[44.16,50.52,58.74,63.90,67.34],
+                 broll=[("noise_screens",44.90,5.60),("site_yoga",53.90,3.40)]),
+            dict(name="why",    s=73.90, e=101.60,
+                 heads=[(74.02,"WHY LONGEVITY NEVER STUCK FOR YOU")],
+                 emph=[78.94,83.86,87.82,92.04,94.30,96.70,99.04], broll=[]),
+            dict(name="pillars",s=127.40,e=160.70,
+                 heads=[(127.50,"THE SIX PILLARS OF A LONGER LIFE")],
+                 emph=[133.00,147.12,150.60,153.74,157.28],
+                 broll=[("site_nutrition",137.10,1.90),("site_sleep",139.00,1.80),
+                        ("swimmer_dawn",140.80,1.80),("site_supplements",142.60,1.90),
+                        ("site_wearables",144.50,1.70)]),
+            dict(name="proof",  s=165.40,e=189.80,
+                 heads=[(171.00,"+14 YEARS LIFE TRAJECTORY")],
+                 emph=[177.40,183.20,186.02],
+                 broll=[("data_curve",171.20,5.00)]),
+            dict(name="academy",s=195.80,e=221.00,
+                 heads=[(195.94,"LONGEVITY LIFE ACADEMY · 18 LIVE SESSION COURSE")],
+                 emph=[199.80,205.16,208.80,217.50],
+                 broll=[("oximeter_data",213.40,4.60)]),
+            dict(name="close",  s=377.50,e=395.50,
+                 heads=[(377.60,"YOUR LONGEVITY BLUEPRINT")],
+                 emph=[380.08,382.82,384.98,387.80,390.64,394.44], broll=[]),
+            dict(name="close2", s=395.60,e=400.40, heads=[], emph=[397.72], broll=[]),
           ]
-          CARDS_AFTER={"proof":"cta3"}
+          CARDS_AFTER={"pillars":"cta1","proof":"cta2","academy":"cta3"}
           gaps=[]
           for i in range(len(words)-1):
               g0,g1 = words[i][1], words[i+1][0]
