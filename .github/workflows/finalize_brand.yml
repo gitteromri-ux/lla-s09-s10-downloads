@@ -1,0 +1,101 @@
+name: Finalize brand (intro patched + outro + Trustpilot end card)
+
+# Wraps a published film with: client intro (Est.2000 removed, blue eTeacher
+# logo), client outro OTRO-1 with its music, fast cut to premium end card
+# (logo + Trustpilot + ENROLL NOW).
+
+on:
+  workflow_dispatch:
+    inputs:
+      film:
+        description: "Deliverable basename to wrap"
+        required: false
+        default: "Courtney_MASTERCLASS"
+
+permissions:
+  contents: write
+
+jobs:
+  wrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Build
+        env:
+          FILM: ${{ github.event.inputs.film }}
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          M="https://media.githubusercontent.com/media/${{ github.repository }}/main"
+          curl -sS -L --fail --retry 4 "$M/deliverables/${FILM}.mp4" -o film.mp4
+          curl -sS -L --fail --retry 4 "$M/deliverables/fetched/asset_2.mp4" -o outro.mp4
+          curl -sS -L --fail --retry 4 "$M/deliverables/fetched/asset_3.mp4" -o intro.mp4
+          D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 film.mp4)
+          MID_END=$(awk "BEGIN{print $D-4.2}")
+          # 1) intro: remove Est.2000, cover old eTeacher text, overlay blue logo (fades in)
+          ID=$(ffprobe -v error -show_entries format=duration -of csv=p=0 intro.mp4)
+          ffmpeg -y -loglevel error -i intro.mp4 -loop 1 -t "$ID" -i assets/brand_v3/sprite_eteacher.png \
+            -filter_complex "[0:v]delogo=x=3300:y=1120:w=1090:h=240,delogo=x=3350:y=2900:w=980:h=270,scale=1920:1080:flags=lanczos,fps=30[v0];[1:v]scale=190:-1,format=rgba,fade=t=in:st=3.1:d=0.6:alpha=1[lg];[v0][lg]overlay=x=(W-w)/2:y=738[vout]" \
+            -map "[vout]" -map 0:a -c:v libx264 -crf 16 -preset fast -pix_fmt yuv420p \
+            -c:a aac -ar 48000 -ac 2 -af "afade=t=out:st=$(awk "BEGIN{print $ID-0.25}"):d=0.25" seg_intro.mp4
+          # 2) film body: drop old opener card (2.2s) and old end card (4.2s)
+          ffmpeg -y -loglevel error -ss 2.2 -to "$MID_END" -i film.mp4 \
+            -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p \
+            -c:a aac -ar 48000 -ac 2 -af "afade=t=in:d=0.05,afade=t=out:st=$(awk "BEGIN{print $MID_END-2.2-0.15}"):d=0.15" seg_film.mp4
+          # 3) outro OTRO-1 with its own music
+          OD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 outro.mp4)
+          ffmpeg -y -loglevel error -i outro.mp4 \
+            -vf "scale=1920:1080:flags=lanczos,fps=30" \
+            -c:v libx264 -crf 16 -preset fast -pix_fmt yuv420p \
+            -c:a aac -ar 48000 -ac 2 -af "afade=t=in:d=0.06,afade=t=out:st=$(awk "BEGIN{print $OD-0.20}"):d=0.20" seg_outro.mp4
+          # 4) fast cut to premium end card, music bed swell under it
+          ffmpeg -y -loglevel error -loop 1 -t 4.5 -i assets/brand_v3/endcard_v3.png \
+            -ss 30 -t 4.5 -stream_loop -1 -i assets/music_bed_0717.mp3 \
+            -vf "scale=1920:1080,fps=30,fade=t=out:st=4.1:d=0.4" \
+            -map 0:v -map 1:a -c:v libx264 -crf 16 -preset fast -pix_fmt yuv420p \
+            -c:a aac -ar 48000 -ac 2 -af "volume=0.5,afade=t=in:d=0.15,afade=t=out:st=3.6:d=0.9" -shortest seg_end.mp4
+          printf "file '%s/seg_intro.mp4'\nfile '%s/seg_film.mp4'\nfile '%s/seg_outro.mp4'\nfile '%s/seg_end.mp4'\n" "$PWD" "$PWD" "$PWD" "$PWD" > list.txt
+          ffmpeg -y -loglevel error -f concat -safe 0 -i list.txt -c:v libx264 -crf 16 -preset medium \
+            -pix_fmt yuv420p -c:a aac -b:a 256k -movflags +faststart "${FILM}_BRAND.mp4"
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "${FILM}_BRAND.mp4"
+          FD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "${FILM}_BRAND.mp4")
+          mkdir -p deliverables/qc_cinema
+          for p in 1 3 4.8 7 20 $(awk "BEGIN{print $FD-8.5}") $(awk "BEGIN{print $FD-5.5}") $(awk "BEGIN{print $FD-2.5}"); do
+            ffmpeg -y -loglevel error -ss "$p" -i "${FILM}_BRAND.mp4" -frames:v 1 "deliverables/qc_cinema/br_${FILM}_${p%.*}.jpg" || true
+          done
+      - name: Publish
+        env:
+          FILM: ${{ github.event.inputs.film }}
+        run: |
+          set -e
+          python3 - <<PY
+          import os
+          film=os.environ["FILM"]
+          html=open('finalcut/index.html').read()
+          name=f"{film}_BRAND"
+          if name not in html:
+              url=f"https://media.githubusercontent.com/media/gitteromri-ux/lla-s09-s10-downloads/main/deliverables/{name}.mp4"
+              sec=('\n<h2>&#128142; '+film.replace("Courtney_","")+' · BRANDED <span class="badge">INTRO + OUTRO + TRUSTPILOT</span></h2>\n'
+                   '<div class="card">\n<h3>'+name+'</h3><div class="meta">1080p · CLIENT INTRO/OUTRO · TRUSTPILOT CTA</div>\n'
+                   f'<video src="{url}" autoplay muted loop playsinline controls preload="metadata"></video>\n'
+                   f'<br><a class="btn" href="{url}" download>&#11015; Download</a>\n</div>\n')
+              i=html.find('<h2>')
+              open('finalcut/index.html','w').write(html[:i]+sec+html[i:])
+              print("page card added")
+          PY
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git lfs install
+          git lfs track "*.mp4" || true
+          cp "${FILM}_BRAND.mp4" deliverables/
+          git add .gitattributes finalcut/index.html "deliverables/${FILM}_BRAND.mp4" deliverables/qc_cinema
+          git commit -m "BRANDED: ${FILM} with client intro/outro + Trustpilot end card"
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.film }}_BRAND
+          path: "*_BRAND.mp4"
+          if-no-files-found: error
