@@ -40,16 +40,17 @@ jobs:
           CUT=$(ffmpeg -i work/outro_src.mp4 -vf "select='gt(scene,0.30)',metadata=print" -f null - 2>&1 \
                 | grep -oE "pts_time:[0-9.]+" | cut -d: -f2 \
                 | awk '$1>=3.0 && $1<=4.6 {print; exit}')
-          [ -z "$CUT" ] && CUT=3.8
+          [ -z "$CUT" ] && CUT=3.6
+          CUT=$(python3 -c "print(min(float('$CUT'), 3.65))")
           echo "scene cut at: $CUT"
           D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 work/outro_src.mp4)
           if grep -q audio work/streams.txt; then
             ffmpeg -y -ss "$CUT" -i work/outro_src.mp4 \
-              -vf "scale=1920:1080,fps=30,setpts=PTS/0.82" -af "atempo=0.82" \
+              -vf "scale=1920:1080,fps=30,setpts=PTS/0.65" -af "atempo=0.65" \
               -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/ov0.mp4
           else
             ffmpeg -y -ss "$CUT" -i work/outro_src.mp4 -f lavfi -t 10 -i anullsrc=r=48000:cl=stereo \
-              -map 0:v -map 1:a -vf "scale=1920:1080,fps=30,setpts=PTS/0.82" -shortest \
+              -map 0:v -map 1:a -vf "scale=1920:1080,fps=30,setpts=PTS/0.65" -shortest \
               -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/ov0.mp4
           fi
           # music check: if the section is effectively silent, lay the client track under it
