@@ -33,15 +33,46 @@ jobs:
             -map "[v]" -map 0:a -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p \
             -c:a aac -b:a 256k -movflags +faststart deliverables/bookends/LLA_INTRO_FINAL.mp4
 
-          # OUTRO: client outro (own music) -> fast cut to ENROLL card (sting hit)
-          ffmpeg -y -i work/outro_src.mp4 -vf "scale=1920:1080,fps=30" \
-            -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/ov.mp4
+          # OUTRO v2: cut the sensor/product demo section, keep the LAPTOP
+          # live-session scene, slowed for dwell. Music guaranteed.
+          ffprobe -v error -show_entries stream=codec_type -of csv=p=0 work/outro_src.mp4 | tee work/streams.txt
+          # find the scene cut between the demo and the laptop scene (3.0-4.6s)
+          CUT=$(ffmpeg -i work/outro_src.mp4 -vf "select='gt(scene,0.30)',metadata=print" -f null - 2>&1 \
+                | grep -oE "pts_time:[0-9.]+" | cut -d: -f2 \
+                | awk '$1>=3.0 && $1<=4.6 {print; exit}')
+          [ -z "$CUT" ] && CUT=3.8
+          echo "scene cut at: $CUT"
+          D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 work/outro_src.mp4)
+          if grep -q audio work/streams.txt; then
+            ffmpeg -y -ss "$CUT" -i work/outro_src.mp4 \
+              -vf "scale=1920:1080,fps=30,setpts=PTS/0.82" -af "atempo=0.82" \
+              -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/ov0.mp4
+          else
+            ffmpeg -y -ss "$CUT" -i work/outro_src.mp4 -f lavfi -t 10 -i anullsrc=r=48000:cl=stereo \
+              -map 0:v -map 1:a -vf "scale=1920:1080,fps=30,setpts=PTS/0.82" -shortest \
+              -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/ov0.mp4
+          fi
+          # music check: if the section is effectively silent, lay the client track under it
+          MV=$(ffmpeg -i work/ov0.mp4 -af volumedetect -f null - 2>&1 | grep mean_volume | grep -oE "\-?[0-9.]+ dB" | grep -oE "\-?[0-9.]+")
+          echo "outro mean volume: $MV dB"
+          NEED_BED=$(python3 -c "print(1 if float('${MV:--99}') < -35 else 0)")
+          OD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 work/ov0.mp4)
+          if [ "$NEED_BED" = "1" ] && [ -f production/music/client_track_lgvty.mp3 ]; then
+            echo "outro is silent -> client track under the whole outro"
+            ffmpeg -y -i work/ov0.mp4 -i production/music/client_track_lgvty.mp3 -filter_complex \
+              "[1:a]silenceremove=start_periods=1:start_threshold=-40dB,volume=0.55,afade=t=in:d=0.3[m];[0:a][m]amix=inputs=2:duration=first:normalize=0[a]" \
+              -map 0:v -map "[a]" -c:v copy -c:a aac -ar 48000 -ac 2 work/ov.mp4
+          else
+            cp work/ov0.mp4 work/ov.mp4
+          fi
+          # publish processed outro for the film assembler to reuse
+          cp work/ov.mp4 production/footage/clips/outro_proc.mp4
           if [ -f work/fa_sting.m4a ]; then
-            ffmpeg -y -t 3.0 -i work/card.mp4 -i work/fa_sting.m4a -filter_complex \
-              "[1:a]volume=0.7,apad,atrim=0:3.0[a]" -map 0:v -map "[a]" \
+            ffmpeg -y -t 3.5 -i work/card.mp4 -i work/fa_sting.m4a -filter_complex \
+              "[1:a]volume=0.7,apad,atrim=0:3.5[a]" -map 0:v -map "[a]" \
               -c:v libx264 -crf 16 -preset medium -c:a aac -ar 48000 -ac 2 work/cardseg.mp4
           else
-            ffmpeg -y -t 3.0 -i work/card.mp4 -f lavfi -t 3.0 -i anullsrc=r=48000:cl=stereo \
+            ffmpeg -y -t 3.5 -i work/card.mp4 -f lavfi -t 3.5 -i anullsrc=r=48000:cl=stereo \
               -map 0:v -map 1:a -c:v libx264 -crf 16 -preset medium -c:a aac -shortest work/cardseg.mp4
           fi
           printf "file 'ov.mp4'\nfile 'cardseg.mp4'\n" > work/cc.txt
@@ -56,7 +87,8 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git lfs install
-          git add deliverables/bookends
+          git lfs track "*.mp4" >/dev/null 2>&1 || true
+          git add deliverables/bookends production/footage/clips/outro_proc.mp4
           git commit -m "Standalone bookends: processed intro + outro sequence"
           for n in 1 2 3 4; do
             git pull --rebase origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break || sleep $((2**n))

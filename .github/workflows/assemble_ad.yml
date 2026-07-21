@@ -33,6 +33,8 @@ jobs:
           for c in capsules_macro noise_scroll noise_off path_dawn seat_light site_ctabg site_nutrition site_sleep site_yoga site_supplements site_coldplunge data_curve site_protocol site_mental site_wearables food_flatlay swimmer_dawn oximeter_data intro_src outro_src; do
             curl -sL --fail "$M/production/footage/clips/$c.mp4" -o "work/$c.mp4"
           done
+          # processed outro (Abbott section cut, laptop slow-dwell), if published
+          curl -sL --fail "$M/production/footage/clips/outro_proc.mp4?nc=$TS" -o work/outro_proc.mp4 || true
           # brand fonts for captions + headlines
           curl -sL --fail -o fonts/Fraunces.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
           curl -sL --fail -o fonts/Inter.ttf "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
@@ -141,10 +143,11 @@ jobs:
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:02d}.mp4"],check=True)
 
           def outroseg(idx):
-              # client outro animation, untouched, own music
-              d = dur0("work/outro_src.mp4")
+              # prefer the published processed outro (Abbott cut, laptop slow-dwell)
+              src = "work/outro_proc.mp4" if os.path.exists("work/outro_proc.mp4") and os.path.getsize("work/outro_proc.mp4") > 10000 else "work/outro_src.mp4"
+              d = dur0(src)
               TL.append(round(d,4))
-              subprocess.run([FF,"-y","-i","work/outro_src.mp4",
+              subprocess.run([FF,"-y","-i",src,
                 "-vf",f"scale={W}:{H},fps={FPS}","-c:v","libx264","-crf","17","-preset","fast",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:02d}.mp4"],check=True)
 
