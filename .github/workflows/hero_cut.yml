@@ -61,7 +61,7 @@ jobs:
           FF="ffmpeg"; W,H,FPS=1920,1080,30
           os.makedirs("seg", exist_ok=True)
           GRADE="curves=preset=medium_contrast,eq=contrast=1.05:saturation=1.08:brightness=0.01,colorbalance=rm=.02:bm=-.02,vignette=PI/6.2"
-          TIGHT="crop=1360:765:(iw-1360)/2:(ih-765)*0.16,scale=1920:1080:flags=lanczos,"
+          TIGHT="crop=1680:945:(iw-1680)/2:(ih-945)*0.30,scale=1920:1080:flags=lanczos,"
           ACTS=[
             dict(name="hook", s=39.60, e=52.90,
                  heads=[(39.75,"LONGEVITY ADVICE IS EVERYWHERE.")],
@@ -99,8 +99,7 @@ jobs:
           idx=0; tight=False; PLAN=[]
           def enc_her(ss,dur,tg):
               global idx; idx+=1; PLAN.append(dur)
-              WIDEC="crop=1440:810:(iw-1440)/2:(ih-810)*0.10,scale=1920:1080:flags=lanczos,"
-              vf=(TIGHT if tg else WIDEC)+GRADE+f",scale={W}:{H},fps={FPS}"
+              vf=(TIGHT if tg else "")+GRADE+f",scale={W}:{H},fps={FPS}"
               subprocess.run([FF,"-y","-loglevel","error","-ss",str(ss),"-t",str(dur),"-i","base.mp4",
                 "-vf",vf,"-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
@@ -137,6 +136,13 @@ jobs:
           vig=vig.filter(ImageFilter.GaussianBlur(220))
           bg=Image.composite(bg,Image.new("RGB",(W,H),(4,12,30)),vig)
           bg.save("cardbg.png")
+          sh=Image.new("RGBA",(W,H),(0,0,0,0))
+          import math
+          pxs=sh.load()
+          for yy in range(700,H):
+              f=(yy-700)/(H-700); a=int(120*(f*f*(3-2*f)))
+              for xx in range(W): pxs[xx,yy]=(4,10,24,a)
+          sh.save("shadow.png")
           F_DISP=lambda s: ImageFont.truetype("fonts/Fraunces-Display.ttf",s)
           F_INT=lambda s: ImageFont.truetype("fonts/Inter-Bold.ttf",s)
           def strip_png(spans,font,tag,strike_idx=None,pad=30):
@@ -200,7 +206,7 @@ jobs:
                 "-frames:v","1","hold.png"],check=True)
               subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i","hold.png",
                 "-ss",str(a_ss),"-t",str(dur),"-i","base.mp4","-map","0:v","-map","1:a",
-                "-vf","crop=1440:810:(iw-1440)/2:(ih-810)*0.10,scale=1920:1080:flags=lanczos,"+GRADE+f",scale={W}:{H},fps={FPS}",
+                "-vf",GRADE+f",scale={W}:{H},fps={FPS}",
                 "-af","afade=t=in:d=0.02",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
@@ -322,9 +328,9 @@ jobs:
           tj=max(6.0, tm-4.8)
           cmd=["ffmpeg","-y","-loglevel","error","-i","cut.mp4",
             "-i","assets/music_bed_0717.mp3","-i","assets/music_bed_0717.mp3",
-            "-stream_loop","-1","-i","tone.wav",
+            "-stream_loop","-1","-i","tone.wav","-loop","1","-i","shadow.png",
             "-filter_complex",
-            f"[0:v]subtitles=caps.ass:fontsdir=fonts,noise=alls=5:allf=t[vout];"
+            f"[0:v][4:v]overlay=0:0,subtitles=caps.ass:fontsdir=fonts,noise=alls=5:allf=t[vout];"
             f"[0:a]asplit=2[voice][sc];"
             f"[1:a]atrim=0:{tj+0.6},afade=t=out:st={tj-0.6}:d=1.2[bA];"
             f"[2:a]atrim=24.2:55.4,afade=t=in:d=1.0,afade=t=out:st={D-tj-0.9 if D-tj<31.2 else 30.3}:d=0.9,adelay={int(tj*1000)}|{int(tj*1000)}[bB];"
