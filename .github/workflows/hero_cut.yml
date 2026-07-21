@@ -64,7 +64,7 @@ jobs:
           TIGHT="crop=1680:945:(iw-1680)/2:(ih-945)*0.30,scale=1920:1080:flags=lanczos,"
           ACTS=[
             dict(name="hook", s=39.60, e=52.90,
-                 heads=[(44.90,"LONGEVITY ADVICE IS EVERYWHERE.")],
+                 heads=[(39.75,"LONGEVITY ADVICE IS EVERYWHERE.")],
                  emph=[44.16,50.52],
                  broll=[("noise_screens",44.90,4.20)]),
             dict(name="path", s=58.60, e=66.60,
@@ -291,7 +291,7 @@ jobs:
           ass=("[Script Info]\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\n"
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
             "Style: Cap,Inter,96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H98000000,0,0,0,0,100,100,0.2,0,1,0,2.2,2,90,90,205,1\n"
-            "Style: Head,Fraunces,72,&H00EAF2F5,&H00EAF2F5,&H8A341608,&H8A341608,0,0,0,0,100,100,9,0,3,13,0,8,60,60,42,1\n\n"
+            "Style: Head,Fraunces,72,&H00EAF2F5,&H00EAF2F5,&H30341608,&H30341608,0,0,0,0,100,100,9,0,3,13,0,8,60,60,42,1\n\n"
             "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
           sent=True
           for st,en,ws in lines:
