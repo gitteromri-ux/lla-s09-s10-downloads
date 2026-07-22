@@ -351,9 +351,9 @@ jobs:
           subprocess.run(cmd,check=True)
           subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size","-of","default=noprint_wrappers=1","Courtney_HERO.mp4"],check=True)
           PYEOF
-          mkdir -p deliverables/qc_cinema
+          mkdir -p deliverables/qc_hero
           for p in 1 4 10 16 24 34 44 52 62 72 82 88 94; do
-            ffmpeg -y -loglevel error -ss "$p" -i Courtney_HERO.mp4 -frames:v 1 "deliverables/qc_cinema/ad90_${p}.jpg" || true
+            ffmpeg -y -loglevel error -ss "$p" -i Courtney_HERO.mp4 -frames:v 1 "deliverables/qc_hero/ad90_${p}.jpg" || true
           done
       - name: Publish to finalcut page
         run: |
@@ -376,9 +376,9 @@ jobs:
           git lfs install
           git lfs track "*.mp4" || true
           cp Courtney_HERO.mp4 deliverables/
-          git add .gitattributes finalcut/index.html deliverables/Courtney_HERO.mp4 deliverables/qc_cinema
-          git commit -m "AD90: 90s paid Meta cut"
-          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+          git add .gitattributes finalcut/index.html deliverables/Courtney_HERO.mp4 deliverables/qc_hero
+          git commit -m "HERO: 85s Netflix-promo cut (Artlist b-roll)"
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m "keep fresh render" origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
       - uses: actions/upload-artifact@v4
         with:
           name: Courtney_HERO
