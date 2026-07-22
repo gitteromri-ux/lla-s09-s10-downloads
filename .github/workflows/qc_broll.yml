@@ -9,12 +9,11 @@ jobs:
       - name: Build contact sheet
         run: |
           set -e
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg imagemagick
           python3 - <<'PY'
           import json, subprocess, os
           m=json.load(open("production/artlist/qc_map.json"))
           os.makedirs("qcf", exist_ok=True)
-          tiles=[]
           for name,url in sorted(m.items()):
               try:
                   subprocess.run(["curl","-sSL","--fail","--retry","4",url,"-o",f"{name}.mp4"],check=True)
@@ -23,23 +22,13 @@ jobs:
                     f"scale=640:360,drawtext=text='{name}':fontcolor=yellow:fontsize=26:x=8:y=8:box=1:boxcolor=black@0.6",
                     f"qcf/{name}.jpg"],check=True)
                   print("ok",name, os.path.getsize(f"{name}.mp4"))
-                  tiles.append(f"qcf/{name}.jpg")
               except Exception as e:
                   print("MISS",name,e)
-          # montage via PIL (reliable across N inputs)
-          from PIL import Image
-          ims=[Image.open(t).convert("RGB").resize((640,360)) for t in tiles]
-          n=len(ims); cols=2; rows=(n+cols-1)//cols; pad=10
-          W=cols*640+(cols+1)*pad; H=rows*360+(rows+1)*pad
-          sheet=Image.new("RGB",(W,H),(16,24,40))
-          for i,im in enumerate(ims):
-              r,c=divmod(i,cols)
-              sheet.paste(im,(pad+c*(640+pad), pad+r*(360+pad)))
-          sheet.save("deliverables/qc_broll.jpg",quality=90)
-          print("sheet built with",n,"tiles")
           PY
+          montage qcf/*.jpg -tile 2x -geometry 640x360+8+8 -background '#101828' deliverables/qc_broll.jpg
+          identify deliverables/qc_broll.jpg
           git config user.name github-actions
           git config user.email actions@github.com
           git add deliverables/qc_broll.jpg
-          git commit -m "QC broll contact sheet" || echo nochange
+          git commit -m "QC broll contact sheet v2" || echo nochange
           for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
