@@ -65,75 +65,65 @@ jobs:
       - name: Build cut + captions + headlines
         run: |
           set -e
+          export ENERGY=1
           python3 - <<'PY'
-          import json, subprocess, os
+          import json, subprocess, os, math, bisect
           T = json.load(open("production/transcript_0717.json"))
           words = [(w["s"], w["e"], w["w"].strip()) for seg in T for w in seg["words"]]
           FF="ffmpeg"; W,H,FPS=1920,1080,30
           os.makedirs("seg", exist_ok=True)
           GRADE="eq=contrast=1.03:saturation=1.02:brightness=0.035:gamma=1.05,colorbalance=rm=.01:bm=-.01"
-          TIGHT="crop=1680:945:(iw-1680)/2:(ih-945)*0.30,scale=1920:1080:flags=lanczos,"
+          ENERGY=float(os.environ.get("ENERGY","0"))   # 0 = calm (META), 1 = punchy (HERO)
+          GAPTHR=0.26-0.04*ENERGY; PAD=0.07-0.02*ENERGY; TAIL=0.05-0.02*ENERGY
+          SUBLEN=3.2-0.6*ENERGY; CARDD=1.6-0.2*ENERGY; INTRO=1.4; ENDD=2.6
+          # FULL SCRIPT — every section, best take, b-roll locked to the exact spoken word
           ACTS=[
-            dict(name="hook", s=39.60, e=52.90,
-                 heads=[(39.75,"LONGEVITY ADVICE IS EVERYWHERE.")],
-                 emph=[44.16,50.52],
-                 broll=[("noise_screens",44.90,4.20)]),
-            dict(name="path", s=58.60, e=66.60,
-                 heads=[(58.74,"YOUR DIRECT PATH TO LONGEVITY")],
-                 emph=[63.90], broll=[]),
-            dict(name="pillars", s=127.40, e=146.20,
-                 heads=[(127.50,"THE SIX PILLARS OF A LONGER LIFE")],
-                 emph=[133.00],
-                 broll=[("site_nutrition",137.05,1.00),("swimmer_dawn",139.10,1.20),
-                        ("site_supplements",140.60,1.75),("oximeter_data",144.05,2.00)]),
-            dict(name="blueprint", s=157.20, e=160.70,
-                 heads=[], emph=[157.28], broll=[]),
-            dict(name="proof", s=171.10, e=182.60,
-                 heads=[(171.22,"+14 YEARS LIFE TRAJECTORY")],
-                 emph=[177.40],
-                 broll=[("data_curve",171.22,4.20)]),
-            dict(name="teach", s=185.90, e=189.80,
-                 heads=[], emph=[186.02], broll=[]),
-            dict(name="close", s=394.30, e=396.90,
-                 heads=[(394.44,"YOUR LONGEVITY BLUEPRINT")],
-                 emph=[394.44], broll=[]),
-            dict(name="close2", s=397.60, e=400.40, heads=[], emph=[397.72], broll=[]),
+            dict(name="hook", s=39.60, e=70.55,
+                 heads=[(44.16,"LONGEVITY ADVICE IS EVERYWHERE."),(58.90,"YOUR DIRECT PATH TO LONGEVITY")],
+                 broll=[("noise_screens",44.16,4.10),("site_yoga",53.90,3.10)]),
+            dict(name="why", s=73.90, e=101.55,
+                 heads=[(74.02,"WHY LONGEVITY NEVER STUCK FOR YOU")], broll=[]),
+            dict(name="pillars", s=127.45, e=160.65,
+                 heads=[(128.40,"THE SIX PILLARS OF A LONGER LIFE")],
+                 broll=[("site_nutrition",137.14,0.90),("site_sleep",138.12,1.00),
+                        ("swimmer_dawn",139.20,1.45),("site_supplements",140.72,1.70),
+                        ("site_wearables",144.14,1.90)]),
+            dict(name="proof", s=165.45, e=189.75,
+                 heads=[(171.00,"+14 YEARS LIFE TRAJECTORY")],
+                 broll=[("data_curve",171.20,4.60)]),
+            dict(name="academy", s=195.85, e=221.00,
+                 heads=[(196.00,"LONGEVITY LIFE ACADEMY · 18 LIVE SESSION COURSE")],
+                 broll=[("oximeter_data",213.40,4.40)]),
+            dict(name="close", s=377.55, e=401.85,
+                 heads=[(378.00,"YOUR LONGEVITY BLUEPRINT")], broll=[]),
           ]
-          CARDS_AFTER={"path":"cta1","blueprint":"cta2","teach":"cta3"}
-          gaps=[]
-          for i in range(len(words)-1):
-              g0,g1 = words[i][1], words[i+1][0]
-              if g1-g0 >= 0.10: gaps.append((g0+g1)/2)
-          def snap(t, lo, hi):
-              c=[g for g in gaps if lo< g < hi]
-              return min(c, key=lambda g: abs(g-t)) if c else t
-          idx=0; tight=False; PLAN=[]
-          def enc_her(ss,dur,tg):
-              global idx; idx+=1; PLAN.append(dur)
-              vf=(""       if True else TIGHT)+GRADE+f",scale={W}:{H},fps={FPS}"
-              subprocess.run([FF,"-y","-loglevel","error","-ss",str(ss),"-t",str(dur),"-i","base.mp4",
-                "-vf",vf,"-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
+          CARDS_AFTER={"pillars":"cta1","proof":"cta2","academy":"cta3"}
+          idx=0; PLAN=[]; SEG=[]; out_t=0.0; card_idxs=[]; heads=[]; music_marks={}
+          def enc_her(ss,de):
+              global idx,out_t; idx+=1; PLAN.append(de); SEG.append((ss,ss+de,out_t)); out_t+=de
+              vf=GRADE+f",scale={W}:{H},fps={FPS}"
+              subprocess.run([FF,"-y","-loglevel","error","-ss",str(ss),"-t",str(de),"-i","base.mp4",
+                "-vf",vf,"-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,de-0.02)}:d=0.02",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
-          def enc_broll(clip,dur,a_ss):
-              global idx; idx+=1; PLAN.append(dur)
+          def enc_broll(clip,de,a_ss):
+              global idx,out_t; idx+=1; PLAN.append(de); SEG.append((a_ss,a_ss+de,out_t)); out_t+=de
               if clip=="noise_screens":
-                  vf=(f"crop=w=iw*0.80:h=ih*0.80:x=(iw-ow)*0.5*min(1\\,t/{dur}):y=(ih-oh)*0.25,"
+                  vf=(f"crop=w=iw*0.80:h=ih*0.80:x=(iw-ow)*0.5*min(1\\,t/{de}):y=(ih-oh)*0.25,"
                       f"scale={W}:{H}:flags=lanczos,fps={FPS},"+GRADE)
               else:
                   vf=(f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},"
                       +GRADE+(",eq=brightness=0.10:saturation=1.05" if clip=="oximeter_data" else ",eq=brightness=0.04")+",unsharp=5:5:0.4")
-              subprocess.run([FF,"-y","-loglevel","error","-stream_loop","-1","-t",str(dur),"-i",f"{clip}.mp4",
-                "-ss",str(a_ss),"-t",str(dur),"-i","base.mp4","-map","0:v","-map","1:a",
-                "-vf",vf,
-                "-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,dur-0.02)}:d=0.02",
+              subprocess.run([FF,"-y","-loglevel","error","-stream_loop","-1","-t",str(de),"-i",f"{clip}.mp4",
+                "-ss",str(a_ss),"-t",str(de),"-i","base.mp4","-map","0:v","-map","1:a","-vf",vf,
+                "-af",f"afade=t=in:d=0.02,afade=t=out:st={max(0,de-0.02)}:d=0.02",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
-          def enc_card(png,dur):
-              global idx; idx+=1; PLAN.append(dur)
-              subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i",png,
-                "-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
-                "-vf",f"scale={W}:{H},fps={FPS},fade=t=in:d=0.45,fade=t=out:st={dur-0.45}:d=0.45",
+          def enc_card(png,de):
+              global idx,out_t; idx+=1; PLAN.append(de); out_t+=de
+              subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(de),"-i",png,
+                "-f","lavfi","-t",str(de),"-i","anullsrc=r=48000:cl=stereo",
+                "-vf",f"scale={W}:{H},fps={FPS},fade=t=in:d=0.35,fade=t=out:st={de-0.35}:d=0.35",
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-shortest",f"seg/{idx:03d}.mp4"],check=True)
           from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -147,13 +137,6 @@ jobs:
           vig=vig.filter(ImageFilter.GaussianBlur(220))
           bg=Image.composite(bg,Image.new("RGB",(W,H),(4,12,30)),vig)
           bg.save("cardbg.png")
-          sh=Image.new("RGBA",(W,H),(0,0,0,0))
-          import math
-          pxs=sh.load()
-          for yy in range(700,H):
-              f=(yy-700)/(H-700); a=int(120*(f*f*(3-2*f)))
-              for xx in range(W): pxs[xx,yy]=(4,10,24,a)
-          sh.save("shadow.png")
           F_DISP=lambda s: ImageFont.truetype("fonts/Fraunces-Display.ttf",s)
           F_INT=lambda s: ImageFont.truetype("fonts/Inter-Bold.ttf",s)
           def strip_png(spans,font,tag,strike_idx=None,pad=30):
@@ -173,96 +156,66 @@ jobs:
             "cta1":[("k","LONGEVITY LIFE ACADEMY",None),
                     ("m",[("A longer life,",BONE)],None),
                     ("m",[("taught properly.",ACC)],None)],
-            "cta2":[("k","18 LIVE SESSIONS \u00b7 SIX PILLARS",None),
+            "cta2":[("k","18 LIVE SESSIONS · SIX PILLARS",None),
                     ("m",[("Master the path,",BONE)],None),
                     ("m",[("week by week.",ACC)],None)],
-            "cta3":[("k","20% OFF \u00b7 THIS WEEK ONLY",None),
+            "cta3":[("k","20% OFF · THIS WEEK ONLY",None),
                     ("m",[("$1,500",MUT),("  $1,200",BONE)],0),
                     ("m",[("Claim your seat.",ACC)],None)],
           }
-          card_idxs=[]
-          def enc_anim_card(cname,dur=2.6):
-              global idx; idx+=1; PLAN.append(dur)
+          def enc_anim_card(cname,de):
+              global idx,out_t; idx+=1; PLAN.append(de); out_t+=de
               spec=CARD_SPECS[cname]; layers=[]
               for j,item in enumerate(spec):
                   kind,payload,sk=item
                   if kind=="k":
-                      txt=" ".join(payload)
-                      wpx,hpx=strip_png([(txt,ACC)],F_INT(34),f"c_{cname}_{j}")
+                      wpx,hpx=strip_png([(payload,ACC)],F_INT(34),f"c_{cname}_{j}")
                   else:
                       wpx,hpx=strip_png(payload,F_DISP(150),f"c_{cname}_{j}",strike_idx=sk)
                   layers.append((f"c_{cname}_{j}.png",wpx,hpx))
-              total=sum(h for _,_,h in layers)+2*24
-              y0=(H-total)//2
-              NF=int(dur*FPS)
-              ins=["-framerate","30","-loop","1","-t",str(dur),"-i","cardbg.png"]
+              total=sum(h for _,_,h in layers)+2*24; y0=(H-total)//2; NF=int(de*FPS)
+              ins=["-framerate","30","-loop","1","-t",str(de),"-i","cardbg.png"]
               fl=[f"[0:v]scale=2200:1238,zoompan=z='1+0.04*on/{NF}':d=1:x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':s={W}x{H}:fps={FPS}[bg]"]
               prev="bg"; y=y0
               for j,(fn,wpx,hpx) in enumerate(layers):
-                  ins+=["-framerate","30","-loop","1","-t",str(dur),"-i",fn]
-                  st=0.12+j*0.17
-                  fl.append(f"[{j+1}:v]format=rgba,fade=t=in:st={st}:d=0.32:alpha=1,fade=t=out:st={dur-0.30}:d=0.28:alpha=1[l{j}]")
+                  ins+=["-framerate","30","-loop","1","-t",str(de),"-i",fn]
+                  st=0.10+j*0.14
+                  fl.append(f"[{j+1}:v]format=rgba,fade=t=in:st={st}:d=0.30:alpha=1,fade=t=out:st={de-0.28}:d=0.26:alpha=1[l{j}]")
                   fl.append(f"[{prev}][l{j}]overlay=x=(W-w)/2:y='{y}+42*exp(-9*max(0\\,t-{st}))'[o{j}]")
                   prev=f"o{j}"; y+=hpx+24
-              fl.append(f"[{prev}]fade=t=in:d=0.20:color=0x0E1F48,fade=t=out:st={dur-0.24}:d=0.24:color=0x0E1F48,format=yuv420p[v]")
+              fl.append(f"[{prev}]fade=t=in:d=0.18:color=0x0E1F48,fade=t=out:st={de-0.22}:d=0.22:color=0x0E1F48,format=yuv420p[v]")
               subprocess.run([FF,"-y","-loglevel","error"]+ins+
-                ["-f","lavfi","-t",str(dur),"-i","anullsrc=r=48000:cl=stereo",
+                ["-f","lavfi","-t",str(de),"-i","anullsrc=r=48000:cl=stereo",
                  "-filter_complex",";".join(fl),"-map","[v]","-map",f"{len(layers)+1}:a",
                  "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                  "-c:a","aac","-shortest",f"seg/{idx:03d}.mp4"],check=True)
               card_idxs.append(idx)
-          def enc_freeze(frame_at,a_ss,dur):
-              global idx; idx+=1; PLAN.append(dur)
-              subprocess.run([FF,"-y","-loglevel","error","-ss",str(frame_at),"-i","base.mp4",
-                "-frames:v","1","hold.png"],check=True)
-              subprocess.run([FF,"-y","-loglevel","error","-loop","1","-t",str(dur),"-i","hold.png",
-                "-ss",str(a_ss),"-t",str(dur),"-i","base.mp4","-map","0:v","-map","1:a",
-                "-vf",GRADE+f",scale={W}:{H},fps={FPS}",
-                "-af","afade=t=in:d=0.02",
-                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
-                "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
-          def her_range(a,b,emph,force_tight_from=None,fw=False):
-              global tight
-              pts=sorted([t for t in emph if a+0.6 < t < b-0.5])
-              marks=[a]+pts+[b]
-              for i in range(len(marks)-1):
-                  x0,x1=marks[i],marks[i+1]
-                  cur=x0
-                  while x1-cur > 3.2:
-                      nxt=snap(cur+2.1, cur+1.1, x1-0.6)
-                      if nxt<=cur+0.5: break
-                      tg = False if fw else tight
-                      enc_her(cur, nxt-cur, tg); tight=not tight; cur=nxt
-                  if x1-cur>0.25:
-                      tg = False if fw else tight
-                      enc_her(cur, x1-cur, tg); tight=not tight
-          out_t=0.0; act_map=[]; heads=[]; music_marks={}
-          enc_card("end.png",2.2); out_t+=2.2
+          def phrases(a,b):
+              ws=[(s,e) for s,e,w in words if a-0.01<=s<b+0.01]
+              if not ws: return []
+              ph=[]; ps=ws[0][0]; pe=ws[0][1]
+              for s,e in ws[1:]:
+                  if s-pe>=GAPTHR: ph.append((ps,pe)); ps=s
+                  pe=e
+              ph.append((ps,pe))
+              return [(max(a,s-PAD),min(b,e+TAIL)) for s,e in ph]
+          def play(a,b):
+              for ps,pe in phrases(a,b):
+                  c=ps
+                  while pe-c>SUBLEN:
+                      c2=min(pe-0.4,c+SUBLEN-0.8); enc_her(c,c2-c); c=c2
+                  if pe-c>0.18: enc_her(c,pe-c)
+          enc_card("end.png",INTRO)
           for act in ACTS:
               music_marks[act["name"]]=out_t
-              for ht,txt in act["heads"]:
-                  heads.append((out_t + max(0.15, ht-act["s"]), txt))
-              ftf=None; fw = act["name"] in ("close","close2")
+              for ht,txt in act["heads"]: heads.append((ht,txt))
               cur=act["s"]
-              for clip,bs,bd in sorted(act["broll"], key=lambda b:b[1]):
-                  her_range(cur, bs, act["emph"], ftf, fw)
-                  enc_broll(clip, bd, bs); cur=bs+bd
-              her_range(cur, act["e"], act["emph"], ftf, fw)
-              if act["name"]=="close2":
-                  enc_freeze(400.30, 400.40, 1.70)
-                  act_map.append((act["s"], 402.10, out_t))
-                  out_t += (act["e"]-act["s"]) + 1.70
-              else:
-                  act_map.append((act["s"],act["e"],out_t))
-                  out_t += act["e"]-act["s"]
-              if act["name"]=="close":
-                  music_marks["monta"]=out_t
-                  for mclip,md in [("swimmer_dawn",0.70),("site_yoga",0.70),("oximeter_data",0.70)]:
-                      enc_broll(mclip, md, 103.0); out_t+=md
-              if act["name"] in CARDS_AFTER:
-                  enc_anim_card(CARDS_AFTER[act["name"]]); out_t+=2.6
+              for clip,bs,bd in sorted(act["broll"],key=lambda b:b[1]):
+                  play(cur,bs); enc_broll(clip,bd,bs); cur=bs+bd
+              play(cur,act["e"])
+              if act["name"] in CARDS_AFTER: enc_anim_card(CARDS_AFTER[act["name"]],CARDD)
           music_marks["end"]=out_t
-          enc_card("end.png",4.2); out_t+=4.2
+          enc_card("end.png",ENDD)
           def dipfade(k,mode):
               fn=f"seg/{k:03d}.mp4"
               d=float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",fn],capture_output=True,text=True).stdout)
@@ -275,7 +228,6 @@ jobs:
           with open("list.txt","w") as f:
               for k in range(1,idx+1): f.write(f"file 'seg/{k:03d}.mp4'\n")
           subprocess.run([FF,"-y","-loglevel","error","-f","concat","-safe","0","-i","list.txt","-c","copy","cut.mp4"],check=True)
-          import bisect
           real=[]
           for k in range(1,idx+1):
               d=float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",f"seg/{k:03d}.mp4"],capture_output=True,text=True).stdout)
@@ -287,14 +239,14 @@ jobs:
               return rcum[i]+min(max(0.0,t-pcum[i]), real[i])
           print("plan total",round(pcum[-1],2),"real total",round(rcum[-1],2),"drift",round(rcum[-1]-pcum[-1],2))
           def src2out(t):
-              for s,e,o in act_map:
-                  if s <= t <= e: return o + (t-s)
-              for s,e,o in act_map:
-                  if s-0.3 <= t <= e+0.3: return o + (t-s)
+              for s,e,o in SEG:
+                  if s<=t<=e: return o+(t-s)
+              for s,e,o in SEG:
+                  if s-0.25<=t<=e+0.25: return o+(t-s)
               return None
           HILITE={"direct","path","six","pillars","18","14","blueprint","class","session","seat","courtney","longevity","academy","harvard"}
           BLUE=r"{\c&HFF6E00&}"; WHITE=r"{\c&HFFFFFF&}"
-          lines=[]; cur=[]; t0=None
+          lines=[]; cur=[]; t0=None; last_e=0.0
           for s,e,wd in words:
               o=src2out(s)
               if o is None:
@@ -319,11 +271,13 @@ jobs:
               rs,re=remap(st),remap(en)
               ass+=f"Dialogue: 0,{ts(rs)},{ts(max(re,rs+0.7))},Cap,,0,0,0,,{{\\fad(110,90)}}{cap}\n"
           for ht,txt in heads:
-              rh=remap(ht)
-              ass+=f"Dialogue: 1,{ts(rh)},{ts(rh+3.2)},Head,,0,0,0,,{{\\fad(380,380)\\fsp7\\t(0,600,\\fsp10)}}{txt}\n"
+              o=src2out(ht)
+              if o is None: continue
+              rh=remap(o)
+              ass+=f"Dialogue: 1,{ts(rh)},{ts(rh+3.0)},Head,,0,0,0,,{{\\fad(380,380)\\fsp7\\t(0,600,\\fsp10)}}{txt}\n"
           open("caps.ass","w").write(ass)
           json.dump({k:remap(v) for k,v in music_marks.items()}, open("marks.json","w"))
-          print("segments:",idx,"out:",round(out_t,1),"caps:",len(lines))
+          print("segments:",idx,"out:",round(out_t,1),"caps:",len(lines),"dur:",round(rcum[-1],1))
           PY
       - name: Final encode (captions + music arc + room tone)
         run: |
