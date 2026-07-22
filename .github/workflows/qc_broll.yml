@@ -1,0 +1,42 @@
+name: QC broll contact sheet
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  qc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build contact sheet
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          python3 - <<'PY'
+          import json, subprocess, os
+          m=json.load(open("production/artlist/qc_map.json"))
+          os.makedirs("qcf", exist_ok=True)
+          tiles=[]
+          for name,url in sorted(m.items()):
+              try:
+                  subprocess.run(["curl","-sSL","--fail","--retry","4",url,"-o",f"{name}.mp4"],check=True)
+                  subprocess.run(["ffmpeg","-y","-loglevel","error","-ss","1.8","-i",f"{name}.mp4",
+                    "-frames:v","1","-vf",
+                    f"scale=640:360,drawtext=text='{name}':fontcolor=yellow:fontsize=26:x=8:y=8:box=1:boxcolor=black@0.6",
+                    f"qcf/{name}.jpg"],check=True)
+                  print("ok",name, os.path.getsize(f"{name}.mp4"))
+                  tiles.append(f"qcf/{name}.jpg")
+              except Exception as e:
+                  print("MISS",name,e)
+          # tile 2 cols
+          inp=[]
+          for t in tiles: inp+=["-i",t]
+          n=len(tiles); cols=2; rows=(n+cols-1)//cols
+          subprocess.run(["ffmpeg","-y","-loglevel","error"]+inp+
+            ["-filter_complex",f"tile={cols}x{rows}:margin=8:padding=8:color=0x101828","-frames:v","1",
+             "deliverables/qc_broll.jpg"],check=True)
+          print("sheet built with",n,"tiles")
+          PY
+          git config user.name github-actions
+          git config user.email actions@github.com
+          git add deliverables/qc_broll.jpg
+          git commit -m "QC broll contact sheet" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
