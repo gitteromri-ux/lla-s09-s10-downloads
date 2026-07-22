@@ -93,7 +93,7 @@ jobs:
                  broll=[("data_curve",171.20,4.60)]),
             dict(name="academy", s=195.85, e=221.00,
                  heads=[(196.00,"LONGEVITY LIFE ACADEMY · 18 LIVE SESSION COURSE")],
-                 broll=[("oximeter_data",213.40,4.40)]),
+                 broll=[("online_session",205.16,3.30),("oximeter_data",213.40,4.40)]),
             dict(name="close", s=377.55, e=401.85,
                  heads=[(378.00,"YOUR LONGEVITY BLUEPRINT")], broll=[]),
           ]
@@ -107,7 +107,10 @@ jobs:
                 "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p",
                 "-c:a","aac","-ar","48000","-ac","2",f"seg/{idx:03d}.mp4"],check=True)
           def enc_broll(clip,de,a_ss):
-              global idx,out_t; idx+=1; PLAN.append(de); SEG.append((a_ss,a_ss+de,out_t)); out_t+=de
+              global idx,out_t
+              if not os.path.exists(f"{clip}.mp4"):
+                  print("MISSING broll, using her footage instead:",clip); enc_her(a_ss,de); return
+              idx+=1; PLAN.append(de); SEG.append((a_ss,a_ss+de,out_t)); out_t+=de
               if clip=="noise_screens":
                   vf=(f"crop=w=iw*0.80:h=ih*0.80:x=(iw-ow)*0.5*min(1\\,t/{de}):y=(ih-oh)*0.25,"
                       f"scale={W}:{H}:flags=lanczos,fps={FPS},"+GRADE)
@@ -283,55 +286,69 @@ jobs:
         run: |
           set -e
           python3 - <<'PYEOF'
-          import json, subprocess
+          import json, subprocess, math
           mk=json.load(open("marks.json"))
-          D=float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0","cut.mp4"],capture_output=True,text=True).stdout)
-          tp=mk["proof"]; tm=mk.get("monta",mk["close"]); te=mk["end"]
-          vol=(f"if(lt(t,{tp}),0.20,"
-               f"if(lt(t,{tm}),0.20+0.14*min(1,(t-{tp})/2.5),"
-               f"if(lt(t,{te}),0.36+0.28*min(1,(t-{tm})/1.8),0.66)))")
-          cmd=["ffmpeg","-y","-loglevel","error","-i","cut.mp4",
-            "-stream_loop","-1","-i","assets/music_bed_0717.mp3",
-            "-stream_loop","-1","-i","tone.wav",
-            "-filter_complex",
-            f"[0:v]subtitles=caps.ass:fontsdir=fonts,noise=alls=4:allf=t[vout];"
-            f"[0:a]asplit=2[voice][sc];"
-            f"[1:a]volume=volume='{vol}':eval=frame,afade=t=out:st={D-0.9}:d=0.9[m1];"
-            f"[m1][sc]sidechaincompress=threshold=0.03:ratio=4:attack=25:release=380[mus];"
-            f"[2:a]volume=0.5,afade=t=out:st={D-1.5}:d=1.5[tone];"
-            f"[voice][mus][tone]amix=inputs=3:duration=first:normalize=0[aout]",
-            "-map","[vout]","-map","[aout]","-c:v","libx264","-crf","17","-preset","fast",
-            "-pix_fmt","yuv420p","-c:a","aac","-b:a","256k","-movflags","+faststart","Courtney_META60.mp4"]
-          subprocess.run(cmd,check=True)
-          subprocess.run(["ffprobe","-v","error","-show_entries","format=duration,size","-of","default=noprint_wrappers=1","Courtney_META60.mp4"],check=True)
+          def probe(f): return float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",f],capture_output=True,text=True).stdout)
+          # 1) burn captions + subtle grain onto the voice+video cut (normal speed)
+          subprocess.run(["ffmpeg","-y","-loglevel","error","-i","cut.mp4",
+            "-vf","subtitles=caps.ass:fontsdir=fonts,noise=alls=4:allf=t",
+            "-c:v","libx264","-crf","16","-preset","fast","-pix_fmt","yuv420p",
+            "-c:a","aac","-ar","48000","-ac","2","captioned.mp4"],check=True)
+          D=probe("captioned.mp4")
+          def chain(f):
+              n=max(1,math.ceil(math.log(f)/math.log(2))); e=f**(1/n)
+              return ",".join([f"atempo={e:.6f}"]*n)
+          # targets: full master + 90s + 60s Meta (her voice pitch-preserved via atempo)
+          TARGETS=[("Courtney_META60",D),("Courtney_LLA_90",90.0),("Courtney_LLA_60",60.0)]
+          for name,T in TARGETS:
+              f=D/T
+              tp=mk["proof"]/f; tm=mk.get("monta",mk["close"])/f; te=mk["end"]/f
+              vol=(f"if(lt(t,{tp}),0.20,"
+                   f"if(lt(t,{tm}),0.20+0.14*min(1,(t-{tp})/2.5),"
+                   f"if(lt(t,{te}),0.36+0.28*min(1,(t-{tm})/1.8),0.66)))")
+              fc=(f"[0:v]setpts=PTS/{f:.6f}[v];"
+                  f"[0:a]{chain(f)}[vs];[vs]asplit=2[voice][sc];"
+                  # pro-mix: clean low rumble + a little air on the bed, then arc + fade
+                  f"[1:a]highpass=f=38,treble=g=2:f=8000,volume=volume='{vol}':eval=frame,afade=t=out:st={T-0.9}:d=0.9[m1];"
+                  f"[m1][sc]sidechaincompress=threshold=0.03:ratio=4:attack=25:release=380[mus];"
+                  f"[2:a]volume=0.5,afade=t=out:st={T-1.5}:d=1.5[tone];"
+                  f"[voice][mus][tone]amix=inputs=3:duration=first:normalize=0,dynaudnorm=f=200:g=7[aout]")
+              subprocess.run(["ffmpeg","-y","-loglevel","error","-i","captioned.mp4",
+                "-stream_loop","-1","-i","assets/music_bed_0717.mp3","-stream_loop","-1","-i","tone.wav",
+                "-filter_complex",fc,"-map","[v]","-map","[aout]","-t",f"{T:.3f}",
+                "-r","30","-c:v","libx264","-crf","16","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-b:a","256k","-movflags","+faststart",f"{name}.mp4"],check=True)
+              print(name,"->",round(probe(f'{name}.mp4'),1),"s")
           PYEOF
           mkdir -p deliverables/qc_meta
           for p in 1 4 10 16 24 34 44 52 62 72 82 88 94; do
-            ffmpeg -y -loglevel error -ss "$p" -i Courtney_META60.mp4 -frames:v 1 "deliverables/qc_meta/ad90_${p}.jpg" || true
+            ffmpeg -y -loglevel error -ss "$p" -i Courtney_LLA_90.mp4 -frames:v 1 "deliverables/qc_meta/ad90_${p}.jpg" || true
           done
       - name: Publish to finalcut page
         run: |
           set -e
           python3 - <<'PY'
           html=open('finalcut/index.html').read()
-          if 'Courtney_META60' not in html:
-              url="https://media.githubusercontent.com/media/gitteromri-ux/lla-s09-s10-downloads/main/deliverables/Courtney_META60.mp4"
-              sec=('\n<h2>&#127942; AD90 · PAID META CUT <span class="badge">90 SECONDS</span></h2>\n'
-                   '<p class="note">Final takes only · act headlines · large captions · word-linked footage · music arc to close</p>\n'
-                   '<div class="card">\n<h3>Courtney · AD90 Paid Cut</h3><div class="meta">1080p · LEAD-GEN MASTER</div>\n'
-                   f'<video src="{url}" autoplay muted loop playsinline controls preload="metadata"></video>\n'
-                   f'<br><a class="btn" href="{url}" download>&#11015; Download AD90</a>\n</div>\n')
+          if 'LLA_90 · FULL SCRIPT' not in html:
+              B="https://media.githubusercontent.com/media/gitteromri-ux/lla-s09-s10-downloads/main/deliverables/"
+              def card(t,fn,note):
+                  u=B+fn
+                  return ('\n<h2>&#127942; '+t+'</h2>\n<p class="note">'+note+'</p>\n<div class="card">\n'
+                    '<video src="'+u+'" autoplay muted loop playsinline controls preload="metadata"></video>\n'
+                    '<br><a class="btn" href="'+u+'" download>&#11015; Download</a>\n</div>\n')
+              sec=card('LLA_90 · FULL SCRIPT <span class="badge">90 SEC</span>','Courtney_LLA_90.mp4','Full script · syllabus b-roll · her real voice (pitch-preserved) · pro-mix')
+              sec+=card('LLA_60 · META <span class="badge">60 SEC</span>','Courtney_LLA_60.mp4','Full script in 60s for Meta upload')
               i=html.find('<h2>')
               open('finalcut/index.html','w').write(html[:i]+sec+html[i:])
-              print("page card added")
+              print("90/60 cards added")
           PY
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git lfs install
           git lfs track "*.mp4" || true
-          cp Courtney_META60.mp4 deliverables/
-          git add .gitattributes finalcut/index.html deliverables/Courtney_META60.mp4 deliverables/qc_meta
-          git commit -m "META60: full-script paid Meta cut (Artlist b-roll)"
+          cp Courtney_META60.mp4 Courtney_LLA_90.mp4 Courtney_LLA_60.mp4 deliverables/
+          git add .gitattributes finalcut/index.html deliverables/Courtney_META60.mp4 deliverables/Courtney_LLA_90.mp4 deliverables/Courtney_LLA_60.mp4 deliverables/qc_meta
+          git commit -m "LLA cuts: full-script 90s + 60s (syllabus b-roll, sped, pro-mix)"
           for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m "keep fresh render" origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
       - uses: actions/upload-artifact@v4
         with:
