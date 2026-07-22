@@ -34,7 +34,7 @@ jobs:
           curl -sS -L --fail --retry 4 "$M/deliverables/fetched/asset_2.mp4" -o outro.mp4
           curl -sS -L --fail --retry 4 "$M/deliverables/fetched/asset_3.mp4" -o intro.mp4
           D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 film.mp4)
-          MID_END=$(awk "BEGIN{print $D-4.2}")
+          MID_END=$(awk "BEGIN{print $D-2.6}")
           # 1) intro: remove Est.2000, cover old eTeacher text, overlay blue logo (fades in)
           ID=$(ffprobe -v error -show_entries format=duration -of csv=p=0 intro.mp4)
           ffmpeg -y -loglevel error -i intro.mp4 -loop 1 -t "$ID" -i assets/brand_v3/sprite_eteacher.png \
@@ -42,9 +42,9 @@ jobs:
             -map "[vout]" -map 0:a -c:v libx264 -crf 16 -preset fast -pix_fmt yuv420p \
             -c:a aac -ar 48000 -ac 2 -af "afade=t=out:st=$(awk "BEGIN{print $ID-0.25}"):d=0.25" seg_intro.mp4
           # 2) film body: drop old opener card (2.2s) and old end card (4.2s)
-          ffmpeg -y -loglevel error -ss 2.2 -to "$MID_END" -i film.mp4 \
+          ffmpeg -y -loglevel error -ss 1.4 -to "$MID_END" -i film.mp4 \
             -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p \
-            -c:a aac -ar 48000 -ac 2 -af "afade=t=in:d=0.05,afade=t=out:st=$(awk "BEGIN{print $MID_END-2.2-0.15}"):d=0.15" seg_film.mp4
+            -c:a aac -ar 48000 -ac 2 -af "afade=t=in:d=0.05,afade=t=out:st=$(awk "BEGIN{print $MID_END-1.4-0.15}"):d=0.15" seg_film.mp4
           # 3) outro OTRO-1 with its own music
           OD=$(ffprobe -v error -show_entries format=duration -of csv=p=0 outro.mp4)
           ffmpeg -y -loglevel error -i outro.mp4 \
@@ -93,7 +93,7 @@ jobs:
           cp "${FILM}_BRAND.mp4" deliverables/
           git add .gitattributes finalcut/index.html "deliverables/${FILM}_BRAND.mp4" deliverables/qc_cinema
           git commit -m "BRANDED: ${FILM} with client intro/outro + Trustpilot end card"
-          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && break || (sleep $((2**n))); done
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m "keep fresh render" origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.inputs.film }}_BRAND
