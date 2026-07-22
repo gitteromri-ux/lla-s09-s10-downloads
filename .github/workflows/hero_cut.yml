@@ -51,6 +51,17 @@ jobs:
           # client-supplied insert: longevity-noise screens montage (ADD-1, 8K)
           curl -sS -L --fail --retry 4 \
             "https://media.githubusercontent.com/media/${{ github.repository }}/main/deliverables/fetched/asset_1.mp4" -o noise_screens.mp4
+          # PREMIUM Artlist (Veo 3.1) b-roll — overwrite matching slots with cinematic footage
+          python3 - <<'PYA'
+          import json, subprocess, os
+          m=json.load(open("production/artlist/broll_map.json"))
+          for name,url in m.items():
+              try:
+                  subprocess.run(["curl","-sSL","--fail","--retry","4",url,"-o",f"{name}.mp4"],check=True)
+                  print("artlist b-roll:",name, os.path.getsize(f"{name}.mp4"))
+              except Exception as e:
+                  print("artlist MISS (keeping old):",name,e)
+          PYA
       - name: Build cut + captions + headlines
         run: |
           set -e
