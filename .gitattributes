@@ -3,3 +3,5 @@
 deliverables/seated_talk_sample.mp4 -filter -diff -merge
 
 deliverables/review/*.mp4 -filter -diff -merge
+
+deliverables/hf/*.mp4 -filter -diff -merge
