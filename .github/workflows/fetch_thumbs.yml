@@ -1,0 +1,30 @@
+name: Fetch artlist thumbs
+on: { workflow_dispatch: { inputs: { urls: { required: true } } } }
+permissions: { contents: write }
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: Fetch clips + thumbs
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg imagemagick >/dev/null
+          mkdir -p deliverables/atl
+          i=0
+          IFS=' ' read -ra U <<< "${{ github.event.inputs.urls }}"
+          for url in "${U[@]}"; do
+            i=$((i+1))
+            if curl -sSL --fail --max-time 60 "$url" -o c$i.mp4; then
+              ffmpeg -y -loglevel error -ss 1 -i c$i.mp4 -frames:v 1 -vf "scale=480:-2,drawtext=text='NEW $i':fontcolor=yellow:fontsize=30:x=10:y=10:box=1:boxcolor=black@0.6" deliverables/atl/new_$i.jpg || true
+              cp c$i.mp4 deliverables/atl/new_$i.mp4
+            else echo "miss $i"; fi
+          done
+          montage deliverables/atl/new_*.jpg -tile 3x1 -geometry 480x270+4+4 -background '#0c1018' deliverables/atl/new_footage.jpg || true
+          ls -la deliverables/atl/
+          git config user.name github-actions; git config user.email actions@github.com
+          printf '\ndeliverables/atl/*.mp4 -filter -diff -merge\n' >> .gitattributes
+          git add -f .gitattributes deliverables/atl/new_footage.jpg deliverables/atl/new_*.jpg deliverables/atl/new_*.mp4
+          git commit -m "Fetch newer artlist clips for review" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && GIT_LFS_SKIP_PUSH=1 git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
