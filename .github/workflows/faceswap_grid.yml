@@ -1,0 +1,125 @@
+name: Faceswap grid
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  grid:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
+      - name: Multi-frame faceswap grid (full frame)
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs libgl1 fonts-dejavu-core >/dev/null
+          git lfs install
+          git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          pip install -q "numpy<2" insightface==0.7.3 onnxruntime==1.17.3 opencv-python-headless pillow
+          IN=inswapper_128.onnx
+          for U in \
+            "https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx" \
+            "https://huggingface.co/datasets/Gourieff/ReActor/resolve/main/models/inswapper_128.onnx" \
+            "https://huggingface.co/deepinsight/inswapper/resolve/main/inswapper_128.onnx" ; do
+            curl -sSL --fail --retry 3 "$U" -o "$IN" && break || echo miss; done
+          ls -la "$IN"
+          DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 Courtney_FRONT_PRO.mp4 | cut -d. -f1)
+          echo "duration=$DUR"
+          mkdir -p src
+          t=5; i=0
+          while [ $t -lt $((DUR-3)) ] && [ $t -lt 200 ]; do
+            i=$((i+1)); ffmpeg -y -loglevel error -ss $t -i Courtney_FRONT_PRO.mp4 -frames:v 1 -q:v 2 src/f_$(printf %03d $t).jpg || true
+            t=$((t+4))
+          done
+          ls src | wc -l
+          python3 - <<'PY'
+          import cv2, numpy as np, glob, os
+          import insightface
+          from insightface.app import FaceAnalysis
+          from PIL import Image, ImageDraw, ImageFont
+          app=FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider']); app.prepare(ctx_id=0, det_size=(640,640))
+          sw=insightface.model_zoo.get_model('inswapper_128.onnx', providers=['CPUExecutionProvider'])
+
+          def eye_open(f):
+              # use 2d106 landmarks; approx eye vertical openness / face height
+              try:
+                  lm=f.landmark_2d_106
+                  # insightface 2d106: left eye ~ idx 33-46 region upper/lower; use robust vertical spread of eye clusters
+                  le=lm[[35,36,37,38,39,40,41,42]]; re=lm[[89,90,91,92,93,94,95,96]]
+                  fh=f.bbox[3]-f.bbox[1]
+                  v=((le[:,1].max()-le[:,1].min())+(re[:,1].max()-re[:,1].min()))/2.0
+                  return float(v/(fh+1e-6))
+              except Exception:
+                  return 0.0
+
+          cands=[]
+          for p in sorted(glob.glob('src/*.jpg')):
+              im=cv2.imread(p)
+              if im is None: continue
+              fs=app.get(im)
+              if not fs: continue
+              f=max(fs,key=lambda x:(x.bbox[2]-x.bbox[0])*(x.bbox[3]-x.bbox[1]))
+              yaw=abs(f.pose[1]) if getattr(f,'pose',None) is not None else 99
+              pitch=abs(f.pose[0]) if getattr(f,'pose',None) is not None else 99
+              area=(f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1])
+              eo=eye_open(f)
+              # want frontal, eyes open, decent size, level head
+              score=float(f.det_score) - yaw/45.0 - pitch/60.0 + eo*3.0 + (area**0.5)/6000.0
+              cands.append((score,eo,yaw,p,im,f))
+          cands.sort(key=lambda x:-x[0])
+          # filter eyes reasonably open then spread across time for variety
+          openish=[c for c in cands if c[1]>0.055] or cands
+          # pick 6 spread across the sorted-by-time to vary expression
+          openish_bytime=sorted(openish[:14], key=lambda c:c[3])
+          step=max(1,len(openish_bytime)//6)
+          picks=openish_bytime[::step][:6]
+          if len(picks)<6: picks=(picks+openish[:6])[:6]
+          print("picked frames:", [os.path.basename(c[3]) for c in picks])
+
+          tgt=cv2.imread('deliverables/set_ref.jpg')
+          tf=app.get(tgt); tface=max(tf,key=lambda f:(f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]))
+
+          results=[]; faces=[]
+          for idx,c in enumerate(picks,1):
+              srcface=c[5]; srcim=c[4]
+              out=sw.get(tgt.copy(), tface, srcface, paste_back=True)
+              results.append(out)
+              cv2.imwrite(f'deliverables/seat_opt_{idx}.jpg', out)
+              x1,y1,x2,y2=[int(v) for v in srcface.bbox]
+              pad=int(0.3*(x2-x1)); crop=srcim[max(0,y1-pad):y2+pad, max(0,x1-pad):x2+pad]
+              faces.append(crop)
+
+          def to_pil(cvimg): return Image.fromarray(cv2.cvtColor(cvimg,cv2.COLOR_BGR2RGB))
+          # 2x3 full-frame grid, numbered, with visible border so edges are clearly uncut
+          cw,ch=760,428
+          grid=Image.new('RGB',(cw*3+40, ch*2+90),(10,12,20))
+          d=ImageDraw.Draw(grid)
+          try: F=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",30)
+          except: F=ImageFont.load_default()
+          d.text((14,14),"FULL FRAME — every option shows the whole chair & body, nothing cut. Pick a number.",fill=(255,220,90),font=F)
+          for i,out in enumerate(results):
+              r=i//3; col=i%3
+              im=to_pil(out).resize((cw-10,ch-10))
+              x=col*(cw+10)+10; y=r*(ch+10)+64
+              grid.paste(Image.new('RGB',(cw,ch),(70,200,120)),(x-3,y-3))  # green border
+              grid.paste(im,(x,y))
+              d2=ImageDraw.Draw(grid); d2.rectangle([x+6,y+6,x+58,y+50],fill=(0,0,0)); d2.text((x+18,y+10),str(i+1),fill=(120,255,150),font=F)
+          grid.save('deliverables/seat_grid.jpg',quality=90)
+
+          # source faces strip
+          H=240
+          fs_pil=[to_pil(f).resize((int(f.shape[1]*H/f.shape[0]),H)) for f in faces]
+          W=sum(im.width for im in fs_pil)+10*len(fs_pil)+10
+          strip=Image.new('RGB',(W,H+50),(10,12,20)); dd=ImageDraw.Draw(strip)
+          dd.text((12,12),"The actual face used for each option (from her raw):",fill=(200,220,255),font=F)
+          xx=10
+          for i,im in enumerate(fs_pil,1):
+              strip.paste(im,(xx,44)); dd.text((xx+6,48),str(i),fill=(120,255,150),font=F); xx+=im.width+10
+          strip.save('deliverables/seat_sources.jpg',quality=90)
+          print("GRID DONE")
+          PY
+          ls -la deliverables/seat_grid.jpg deliverables/seat_sources.jpg
+          git config user.name github-actions; git config user.email actions@github.com
+          git add -f deliverables/seat_grid.jpg deliverables/seat_sources.jpg deliverables/seat_opt_*.jpg
+          git commit -m "Faceswap grid: 6 full-frame seated options" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
