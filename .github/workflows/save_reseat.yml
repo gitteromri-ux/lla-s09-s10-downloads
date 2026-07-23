@@ -1,0 +1,19 @@
+name: Save reseat proto
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  save:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: Download + commit reseat frame
+        run: |
+          set -e
+          U="https://mcp.artlist.io/mcp/download?u=https%3A%2F%2Fcms-toolkit-artifacts.artlist.io%2Fcontent%2F-e-x-t-e-r-n-a-l_-i-m-a-g-e_-t-o_-i-m-a-g-e-v1%2Fmedia__4%2Fimage-e0044e88-21ba-4910-b978-fe91174cff72.png%3FExpires%3D2100154372%26Key-Pair-Id%3DK2ZDLYDZI2R1DF%26Signature%3Da0osl6ZaWia6~bOPdLBEjjUqD2wjH-492SJNlMlJBb3Y~FlKGIUucWXNlI6WXPvYXcsY8SsBMo02SjfgU7b2fTHNF5xELMmydX3Qa9sQFfGAdGHAmCPFbZzG7h-L4C2eysI31l~5EDJPtnwTqxNnq9Lofm18MNtfCLW~uxgXnYLEzbUtzXjAUVUZT~QvBZzZn~5ABQpIYw3rh~mq0tNAo80grow50LHbCjnJRmlT8qkbAJmkbw3Gh-RgUdyDgGV3L2--~MN-5z4IA84d6I9VbawqmVS1DV02DFRhTPpVsUfIoPvFsrwnsMjx31E2ZmosOsbEJsswOxNpkN38Hq2JXQ__&name=reseat.png"
+          curl -sSL --fail --retry 4 "$U" -o deliverables/reseat_proto.png
+          ls -la deliverables/reseat_proto.png
+          git config user.name github-actions; git config user.email actions@github.com
+          git add deliverables/reseat_proto.png
+          git commit -m "Reseat prototype: Courtney seated in leather chair on set" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
