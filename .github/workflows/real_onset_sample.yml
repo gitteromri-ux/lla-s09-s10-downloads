@@ -1,0 +1,85 @@
+name: Real Courtney on set sample
+on: { workflow_dispatch: { inputs: { start: { default: "60" }, dur: { default: "8" } } } }
+permissions: { contents: write }
+jobs:
+  comp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
+      - name: Key her REAL talking footage onto the set
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs libgl1 >/dev/null
+          git lfs install && git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          pip install -q "numpy<2" rembg onnxruntime opencv-python-headless pillow
+          ST="${{ github.event.inputs.start }}"; DU="${{ github.event.inputs.dur }}"; ST="${ST:-60}"; DU="${DU:-8}"
+          # extract her real talking segment (video frames + audio)
+          mkdir -p fr out
+          ffmpeg -y -loglevel error -ss $ST -t $DU -i Courtney_FRONT_PRO.mp4 -r 25 fr/%04d.png
+          ffmpeg -y -loglevel error -ss $ST -t $DU -i Courtney_FRONT_PRO.mp4 -vn -c:a aac -b:a 192k aud.m4a
+          ls fr | wc -l
+          python3 - <<'PY'
+          import cv2, numpy as np, glob, os
+          from rembg import remove, new_session
+          from PIL import Image, ImageFilter
+          sess=new_session('birefnet-general')
+          setbg=Image.open('deliverables/set_ref.jpg').convert('RGB')
+          SW,SH=setbg.size
+          # where the seat is on the set (approx center, slightly right of lamp)
+          seat_cx=int(SW*0.50); seat_top=int(SH*0.10)
+          frames=sorted(glob.glob('fr/*.png'))
+          # precompute target person height so full upper body + arms fit with margin
+          for i,fp in enumerate(frames):
+              im=Image.open(fp).convert('RGB')
+              cut=remove(im, session=sess)  # RGBA person
+              a=np.array(cut)
+              alpha=a[:,:,3]
+              ys,xs=np.where(alpha>16)
+              if len(xs)==0:
+                  comp=setbg.copy()
+              else:
+                  x1,x2,y1,y2=xs.min(),xs.max(),ys.min(),ys.max()
+                  person=cut.crop((x1,y1,x2,y2))
+                  pw,ph=person.size
+                  # scale so person height ~ 82% of frame, but width must fit within 84% -> no cut arms
+                  scale=min(SH*0.82/ph, SW*0.84/pw)
+                  nw,nh=max(1,int(pw*scale)),max(1,int(ph*scale))
+                  person=person.resize((nw,nh))
+                  # warm grade to match cinematic set + slight exposure down + contrast
+                  pr=np.array(person).astype(np.float32)
+                  rgb=pr[:,:,:3]; al=pr[:,:,3:4]/255.0
+                  rgb=rgb*np.array([1.06,0.99,0.86])  # warm
+                  rgb=(rgb-128)*1.08+120             # contrast + slight lift down
+                  rgb=np.clip(rgb,0,255)
+                  # feather alpha edges for seamless blend
+                  alw=Image.fromarray((al[:,:,0]*255).astype('uint8')).filter(ImageFilter.GaussianBlur(1.2))
+                  person2=np.dstack([rgb, np.array(alw).astype(np.float32)[...,None][:,:,0:1]])
+                  person2=Image.fromarray(person2.astype('uint8'),'RGBA')
+                  comp=setbg.copy()
+                  px=int(seat_cx-nw/2); py=int(seat_top)
+                  # soft contact shadow under her
+                  sh=Image.new('RGBA',(SW,SH),(0,0,0,0))
+                  from PIL import ImageDraw
+                  d=ImageDraw.Draw(sh)
+                  d.ellipse([px+nw*0.15, py+nh-nh*0.06, px+nw*0.85, py+nh+nh*0.05], fill=(0,0,0,120))
+                  sh=sh.filter(ImageFilter.GaussianBlur(18))
+                  comp=Image.alpha_composite(comp.convert('RGBA'), sh)
+                  comp.alpha_composite(person2,(px,py))
+                  comp=comp.convert('RGB')
+              comp.save(f'out/{i:04d}.png')
+          print("composited", len(frames))
+          PY
+          ffmpeg -y -loglevel error -framerate 25 -i out/%04d.png -i aud.m4a -vf "scale=1280:-2,format=yuv420p" \
+            -c:v libx264 -crf 18 -preset fast -c:a aac -b:a 192k -shortest -movflags +faststart deliverables/real_onset_sample.mp4
+          ls -la deliverables/real_onset_sample.mp4
+          git config user.name github-actions; git config user.email actions@github.com
+          printf '\ndeliverables/real_onset_sample.mp4 -filter -diff -merge\n' >> .gitattributes
+          git add -f .gitattributes deliverables/real_onset_sample.mp4
+          git commit -m "Real Courtney talking footage keyed onto set (sample)" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && GIT_LFS_SKIP_PUSH=1 git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: real_onset_sample, path: deliverables/real_onset_sample.mp4, if-no-files-found: warn }
