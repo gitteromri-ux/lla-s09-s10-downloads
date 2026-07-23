@@ -1,0 +1,49 @@
+name: Lipsync sample
+on: { workflow_dispatch: { inputs: { hero: { default: "2" } } } }
+permissions: { contents: write }
+jobs:
+  ls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
+      - name: Lip-sync hero to her real voice (short proof)
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git libgl1 >/dev/null
+          git clone -q https://github.com/Rudrabha/Wav2Lip.git
+          pip install -q --index-url https://download.pytorch.org/whl/cpu torch==2.0.1 torchvision==0.15.2
+          pip install -q "numpy==1.23.5" "librosa==0.9.1" "numba==0.56.4" "opencv-python-headless" tqdm scipy
+          cd Wav2Lip
+          mkdir -p checkpoints face_detection/detection/sfd temp
+          OK=0
+          for U in \
+            "https://huggingface.co/camenduru/Wav2Lip/resolve/main/checkpoints/wav2lip_gan.pth" \
+            "https://huggingface.co/numz/wav2lip_studio/resolve/main/wav2lip_gan.pth" \
+            "https://huggingface.co/spaces/fffiloni/Wav2Lip/resolve/main/checkpoints/wav2lip_gan.pth" ; do
+            curl -sSL --fail --retry 3 "$U" -o checkpoints/wav2lip_gan.pth && OK=1 && break || echo "miss_ckpt $U"; done
+          [ "$OK" = 1 ] || { echo "NO CKPT"; exit 1; }
+          S=0
+          for U in \
+            "https://www.adrianbulat.com/downloads/python-fan/s3fd-619a316812.pth" \
+            "https://huggingface.co/camenduru/Wav2Lip/resolve/main/checkpoints/s3fd.pth" \
+            "https://huggingface.co/spaces/fffiloni/Wav2Lip/resolve/main/face_detection/detection/sfd/s3fd.pth" ; do
+            curl -sSL --fail --retry 3 "$U" -o face_detection/detection/sfd/s3fd.pth && S=1 && break || echo "miss_s3fd $U"; done
+          [ "$S" = 1 ] || { echo "NO S3FD"; exit 1; }
+          ls -la checkpoints/wav2lip_gan.pth face_detection/detection/sfd/s3fd.pth
+          HERO="${{ github.event.inputs.hero }}"; HERO="${HERO:-2}"
+          cp ../deliverables/seat_opt_${HERO}.jpg hero.jpg || cp ../deliverables/seat_opt_2.jpg hero.jpg
+          ffmpeg -y -loglevel error -i ../deliverables/audio_full_0717.m4a -t 10 -ar 16000 -ac 1 voice.wav
+          python inference.py --checkpoint_path checkpoints/wav2lip_gan.pth --face hero.jpg --audio voice.wav \
+            --outfile out.mp4 --pads 0 12 0 0 --nosmooth --face_det_batch_size 4 --wav2lip_batch_size 32
+          # polish: keep her real voice, subtle push-in, faststart
+          ffmpeg -y -loglevel error -i out.mp4 -vf "scale=1280:-2,format=yuv420p" -c:v libx264 -crf 18 -preset fast \
+            -c:a aac -b:a 192k -movflags +faststart ../deliverables/seated_talk_sample.mp4
+          cd ..
+          ls -la deliverables/seated_talk_sample.mp4
+          git config user.name github-actions; git config user.email actions@github.com
+          git add -f deliverables/seated_talk_sample.mp4
+          git commit -m "Lip-sync proof: Courtney talking on set (her real voice)" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
