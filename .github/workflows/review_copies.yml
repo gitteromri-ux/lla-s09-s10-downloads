@@ -1,0 +1,29 @@
+name: Review copies
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  rc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: Make <30MB review copies of finished cuts
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs >/dev/null
+          git lfs install
+          git lfs pull --include="deliverables/Courtney_LLA_90.mp4,deliverables/Courtney_LLA_60.mp4,deliverables/meta/Courtney_META60_BRAND_9x16.mp4"
+          mkdir -p deliverables/review
+          ffmpeg -y -loglevel error -i deliverables/Courtney_LLA_90.mp4 -vf scale=-2:720 -c:v libx264 -b:v 2050k -maxrate 2300k -bufsize 4M -preset veryfast -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart deliverables/review/LLA_90_review.mp4
+          ffmpeg -y -loglevel error -i deliverables/Courtney_LLA_60.mp4 -vf scale=-2:720 -c:v libx264 -b:v 3200k -maxrate 3500k -bufsize 5M -preset veryfast -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart deliverables/review/LLA_60_review.mp4
+          ffmpeg -y -loglevel error -i deliverables/meta/Courtney_META60_BRAND_9x16.mp4 -vf scale=-2:1280 -c:v libx264 -b:v 950k -maxrate 1100k -bufsize 2M -preset veryfast -pix_fmt yuv420p -c:a aac -b:a 80k -movflags +faststart deliverables/review/META_9x16_review.mp4
+          ls -la deliverables/review/
+          du -m deliverables/review/*
+          git config user.name github-actions; git config user.email actions@github.com
+          printf '\ndeliverables/review/*.mp4 -filter -diff -merge\n' >> .gitattributes
+          git add -f .gitattributes deliverables/review/LLA_90_review.mp4 deliverables/review/LLA_60_review.mp4 deliverables/review/META_9x16_review.mp4
+          git commit -m "Small review copies of finished cuts (<30MB)" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && GIT_LFS_SKIP_PUSH=1 git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: review_copies, path: "deliverables/review/*.mp4", if-no-files-found: warn }
