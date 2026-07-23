@@ -16,7 +16,7 @@ jobs:
           git lfs install
           git lfs pull --include="Courtney_FRONT_PRO.mp4"
           ls -la Courtney_FRONT_PRO.mp4
-          pip install -q insightface==0.7.3 onnxruntime==1.17.3 opencv-python-headless numpy
+          pip install -q "numpy<2" insightface==0.7.3 onnxruntime==1.17.3 opencv-python-headless
           IN=inswapper_128.onnx
           for U in \
             "https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx" \
