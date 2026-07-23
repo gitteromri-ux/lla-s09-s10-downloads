@@ -13,3 +13,5 @@ deliverables/atl/*.mp4 -filter -diff -merge
 deliverables/room/*.mp4 -filter -diff -merge
 
 deliverables/hf/*.mp4 -filter -diff -merge
+
+assets/inserts/*.mp4 -filter -diff -merge
