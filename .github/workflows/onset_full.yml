@@ -42,9 +42,10 @@ jobs:
               fr2=np.clip((fr2-118)*1.06+112,0,255).astype(np.uint8)
               person=cv2.resize(fr2,(nw,nh)); pm=cv2.resize(m,(nw,nh))[...,None]
               canvas=setbg.copy().astype(np.float32)
-              y1,y2=oy,oy+nh; x1,x2=ox,ox+nw
+              y1,y2=oy,min(oy+nh,SH); x1,x2=ox,min(ox+nw,SW)
               roi=canvas[y1:y2,x1:x2]
-              # soft shadow
+              hh,ww=roi.shape[0],roi.shape[1]
+              person=person[:hh,:ww]; pm=pm[:hh,:ww]
               canvas[y1:y2,x1:x2]=person.astype(np.float32)*pm+roi*(1-pm)
               vw.write(canvas.astype(np.uint8))
               done+=1
