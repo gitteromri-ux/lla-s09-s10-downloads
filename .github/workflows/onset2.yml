@@ -1,0 +1,59 @@
+name: Onset2 (keep chair, seat Courtney)
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: Inpaint woman out, seat Courtney
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          pip3 install --quiet "rembg[cpu]" pillow onnxruntime numpy opencv-python-headless
+          git lfs install; git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          ffmpeg -y -loglevel error -ss 70 -i Courtney_FRONT_PRO.mp4 -frames:v 1 -q:v 1 her.png
+          python3 - <<'PY'
+          from rembg import remove, new_session
+          from PIL import Image, ImageFilter, ImageEnhance, ImageChops
+          import numpy as np, cv2
+          bir=new_session("birefnet-general")
+          # matte real Courtney
+          her=Image.open("her.png").convert("RGBA")
+          hc=remove(her, session=bir, post_process_mask=True)
+          r,g,b,a=hc.split(); a=a.filter(ImageFilter.GaussianBlur(0.6)); hc=Image.merge("RGBA",(r,g,b,a)).crop(a.getbbox())
+          rr,gg,bb,aa=hc.split(); rgb=Image.merge("RGB",(rr,gg,bb))
+          rgb=ImageEnhance.Brightness(rgb).enhance(0.82); rgb=ImageEnhance.Contrast(rgb).enhance(1.08)
+          rr,gg,bb=rgb.split(); rr=rr.point(lambda v:min(255,int(v*1.05))); bb=bb.point(lambda v:int(v*0.90)); hc=Image.merge("RGBA",(rr,gg,bb,aa))
+          # remove the woman from the set, KEEP the chair, via inpaint
+          setim=Image.open("deliverables/set_ref.jpg").convert("RGB")
+          W,H=setim.size
+          mask=remove(setim.convert("RGBA"), session=bir, only_mask=True)
+          md=Image.fromarray(np.array(mask)).filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(2))
+          m=np.array(md); m=(m>60).astype('uint8')*255
+          inp=cv2.inpaint(cv2.cvtColor(np.array(setim),cv2.COLOR_RGB2BGR), m, 12, cv2.INPAINT_TELEA)
+          setclean=Image.fromarray(cv2.cvtColor(inp,cv2.COLOR_BGR2RGB))
+          setclean.save("deliverables/set_clean.jpg",quality=93)
+          def compose(hfrac,cx,topy):
+              p=setclean.copy().convert("RGBA")
+              hh=int(H*hfrac); hw=int(hc.width*hh/hc.height); hp=hc.resize((hw,hh))
+              x=int(W*cx-hw/2); y=int(H*topy)
+              sh=Image.new("RGBA",(W,H),(0,0,0,0)); blk=Image.new("RGBA",(hw,hh),(2,1,1,255)); blk.putalpha(hp.split()[3])
+              sh.alpha_composite(blk,(x+8,y+16)); sh=sh.filter(ImageFilter.GaussianBlur(20)); sh=ImageChops.multiply(sh,Image.new("RGBA",(W,H),(255,255,255,140)))
+              p.alpha_composite(sh); p.alpha_composite(hp,(x,y)); return p.convert("RGB")
+          compose(0.86,0.475,0.10).save("deliverables/seat_a.jpg",quality=94)
+          compose(0.80,0.475,0.13).save("deliverables/seat_b.jpg",quality=94)
+          compose(0.74,0.475,0.16).save("deliverables/seat_c.jpg",quality=94)
+          print("done")
+          PY
+          mkdir -p /tmp/o && cp deliverables/seat_a.jpg deliverables/seat_b.jpg deliverables/seat_c.jpg deliverables/set_clean.jpg /tmp/o/
+          git config user.name github-actions; git config user.email actions@github.com
+          for n in 1 2 3 4 5; do
+            git fetch origin main && git checkout -f origin/main
+            cp /tmp/o/seat_a.jpg deliverables/seat_a.jpg; cp /tmp/o/seat_b.jpg deliverables/seat_b.jpg
+            cp /tmp/o/seat_c.jpg deliverables/seat_c.jpg; cp /tmp/o/set_clean.jpg deliverables/set_clean.jpg
+            git add deliverables/seat_a.jpg deliverables/seat_b.jpg deliverables/seat_c.jpg deliverables/set_clean.jpg
+            git commit -m "Onset2 seat images" || true
+            git push origin HEAD:main && break || sleep $((2**n))
+          done
