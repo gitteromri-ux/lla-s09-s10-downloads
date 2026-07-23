@@ -1,0 +1,96 @@
+name: Onset full cut
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  full:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
+      - name: Key her real footage onto set (fast) + build 90s/60s
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs libgl1 >/dev/null
+          git lfs install && git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          pip install -q "numpy<2" mediapipe==0.10.9 opencv-python-headless pillow
+          python3 - <<'PY'
+          import cv2, numpy as np, mediapipe as mp
+          src=cv2.VideoCapture('Courtney_FRONT_PRO.mp4')
+          fps=src.get(cv2.CAP_PROP_FPS) or 25
+          N=int(src.get(cv2.CAP_PROP_FRAME_COUNT))
+          sw=int(src.get(3)); sh=int(src.get(4))
+          setbg=cv2.imread('deliverables/set_ref.jpg'); SH,SW=setbg.shape[:2]
+          # scale whole source frame to fit inside set (no crop -> no cut arms)
+          scale=min(SH*0.92/sh, SW*0.96/sw)
+          nw,nh=int(sw*scale),int(sh*scale)
+          ox=int(SW*0.50-nw/2); oy=int(SH*0.09)
+          seg=mp.solutions.selfie_segmentation.SelfieSegmentation(model_selection=1)
+          vw=cv2.VideoWriter('silent.mp4', cv2.VideoWriter_fourcc(*'mp4v'), fps, (SW,SH))
+          # warm grade LUT-ish factors
+          warm=np.array([0.86,0.99,1.06])  # BGR
+          done=0
+          while True:
+              ok,fr=src.read()
+              if not ok: break
+              res=seg.process(cv2.cvtColor(fr,cv2.COLOR_BGR2RGB))
+              m=res.segmentation_mask
+              m=cv2.GaussianBlur((m*255).astype('uint8'),(0,0),2).astype(np.float32)/255.0
+              m=np.clip((m-0.35)/0.5,0,1)  # tighten edge
+              fr2=(fr.astype(np.float32)*warm)
+              fr2=np.clip((fr2-118)*1.06+112,0,255).astype(np.uint8)
+              person=cv2.resize(fr2,(nw,nh)); pm=cv2.resize(m,(nw,nh))[...,None]
+              canvas=setbg.copy().astype(np.float32)
+              y1,y2=oy,oy+nh; x1,x2=ox,ox+nw
+              roi=canvas[y1:y2,x1:x2]
+              # soft shadow
+              canvas[y1:y2,x1:x2]=person.astype(np.float32)*pm+roi*(1-pm)
+              vw.write(canvas.astype(np.uint8))
+              done+=1
+          vw.release(); src.release()
+          print("frames composited",done)
+          PY
+          # mux her real voice, then encode master
+          ffmpeg -y -loglevel error -i silent.mp4 -i Courtney_FRONT_PRO.mp4 -map 0:v -map 1:a? \
+            -vf "format=yuv420p" -c:v libx264 -crf 18 -preset veryfast -c:a aac -b:a 192k -shortest master.mp4
+          D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 master.mp4)
+          echo "master dur=$D"
+          python3 - "$D" <<'PY'
+          import subprocess,sys,math
+          D=float(sys.argv[1])
+          def chain(f):
+              n=max(1,math.ceil(math.log(f)/math.log(2))); e=f**(1/n)
+              return ",".join([f"atempo={e:.6f}"]*n)
+          for name,T in [("deliverables/Courtney_ONSET_90.mp4",90.0),("deliverables/Courtney_ONSET_60.mp4",60.0)]:
+              if D<=T:  # if shorter, just copy/pad speed 1
+                  f=1.0
+              else:
+                  f=D/T
+              fc=(f"[0:v]setpts=PTS/{f:.6f}[v];[0:a]{chain(f)}[a1];"
+                  f"[1:a]volume=0.16,afade=t=out:st={T-1.2}:d=1.2[m];"
+                  f"[a1][m]amix=inputs=2:duration=first:normalize=0,dynaudnorm=f=200:g=6[a]")
+              subprocess.run(["ffmpeg","-y","-loglevel","error","-i","master.mp4","-stream_loop","-1","-i","assets/music_bed_0717.mp3",
+                "-filter_complex",fc,"-map","[v]","-map","[a]","-t",f"{T:.3f}","-r","30",
+                "-c:v","libx264","-crf","17","-preset","fast","-pix_fmt","yuv420p","-c:a","aac","-b:a","256k","-movflags","+faststart",name],check=True)
+              print(name,"done")
+          PY
+          # QC frames for self-audit
+          for t in 2 20 45; do ffmpeg -y -loglevel error -ss $t -i deliverables/Courtney_ONSET_90.mp4 -frames:v 1 qc_$t.jpg || true; done
+          python3 - <<'PY'
+          from PIL import Image
+          ims=[Image.open(f'qc_{t}.jpg') for t in [2,20,45]]
+          h=440; ims=[i.resize((int(i.width*h/i.height),h)) for i in ims]
+          W=sum(i.width for i in ims)+20; c=Image.new('RGB',(W,h),(10,12,20)); x=0
+          for im in ims: c.paste(im,(x,0)); x+=im.width+10
+          c.save('deliverables/onset_qc.jpg',quality=90)
+          PY
+          ls -la deliverables/Courtney_ONSET_90.mp4 deliverables/Courtney_ONSET_60.mp4 deliverables/onset_qc.jpg
+          git config user.name github-actions; git config user.email actions@github.com
+          printf '\ndeliverables/Courtney_ONSET_90.mp4 -filter -diff -merge\ndeliverables/Courtney_ONSET_60.mp4 -filter -diff -merge\n' >> .gitattributes
+          git add -f .gitattributes deliverables/Courtney_ONSET_90.mp4 deliverables/Courtney_ONSET_60.mp4 deliverables/onset_qc.jpg
+          git commit -m "Onset full cut: real Courtney keyed on set, 90s+60s" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && GIT_LFS_SKIP_PUSH=1 git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: onset_cuts, path: "deliverables/Courtney_ONSET_*.mp4", if-no-files-found: warn }
