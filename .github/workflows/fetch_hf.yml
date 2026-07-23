@@ -1,0 +1,29 @@
+name: Fetch HF clip
+on: { workflow_dispatch: { inputs: { url: { required: true }, name: { default: "hf_clip" } } } }
+permissions: { contents: write }
+jobs:
+  f:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: Fetch + frames
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg imagemagick >/dev/null
+          N="${{ github.event.inputs.name }}"
+          curl -sSL --fail --retry 3 "${{ github.event.inputs.url }}" -o clip.mp4
+          ls -la clip.mp4
+          mkdir -p deliverables/hf
+          cp clip.mp4 deliverables/hf/${N}.mp4
+          D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 clip.mp4)
+          echo "dur=$D"
+          rm -f f_*.jpg
+          i=0; for frac in 0.05 0.25 0.45 0.65 0.85 0.98; do i=$((i+1)); t=$(python3 -c "print(round($D*$frac,2))"); ffmpeg -y -loglevel error -ss $t -i clip.mp4 -frames:v 1 f_$i.jpg; done
+          montage f_*.jpg -tile 3x2 -geometry 480x270+4+4 -background '#0c1018' deliverables/hf/${N}_frames.jpg
+          identify deliverables/hf/${N}_frames.jpg
+          git config user.name github-actions; git config user.email actions@github.com
+          printf '\ndeliverables/hf/*.mp4 -filter -diff -merge\n' >> .gitattributes
+          git add -f .gitattributes deliverables/hf/${N}.mp4 deliverables/hf/${N}_frames.jpg
+          git commit -m "Fetch HF clip ${N}" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && GIT_LFS_SKIP_PUSH=1 git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
