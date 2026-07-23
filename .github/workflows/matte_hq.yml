@@ -1,0 +1,37 @@
+name: Matte HQ (birefnet clean edges)
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  matte:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: HQ matte
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          pip3 install --quiet "rembg[cpu]" pillow onnxruntime
+          git lfs install; git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          SRC=Courtney_FRONT_PRO.mp4
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$SRC"
+          # several calm frames, full res
+          for t in 66 70 168 172; do ffmpeg -y -loglevel error -ss $t -i "$SRC" -frames:v 1 -q:v 1 f_$t.png; done
+          python3 - <<'PY'
+          from rembg import remove, new_session
+          from PIL import Image, ImageFilter
+          sess=new_session("birefnet-general")
+          for t in [66,70,168,172]:
+              im=Image.open(f"f_{t}.png").convert("RGBA")
+              cut=remove(im, session=sess, post_process_mask=True)
+              # gentle edge feather only
+              r,g,b,a=cut.split(); a=a.filter(ImageFilter.GaussianBlur(0.6))
+              Image.merge("RGBA",(r,g,b,a)).save(f"cut_{t}.png")
+              print("cut",t,cut.size)
+          PY
+          mkdir -p deliverables/mattes
+          cp cut_*.png deliverables/mattes/
+          git config user.name github-actions; git config user.email actions@github.com
+          git add deliverables/mattes
+          git commit -m "HQ birefnet mattes (clean edges)" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
