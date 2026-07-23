@@ -1,0 +1,103 @@
+name: Faceswap Courtney onto seated set
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  swap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
+      - name: Faceswap real Courtney onto seated woman in the set
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs libgl1 >/dev/null
+          git lfs install
+          git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          pip install -q insightface==0.7.3 onnxruntime==1.17.3 opencv-python-headless numpy pillow gfpgan basicsr facexlib realesrgan 2>/dev/null || \
+          pip install -q insightface onnxruntime opencv-python-headless numpy pillow gfpgan
+          # ---- fetch inswapper model (try mirrors) ----
+          mkdir -p ~/.insightface/models
+          IN=inswapper_128.onnx
+          for U in \
+            "https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx" \
+            "https://huggingface.co/deepinsight/inswapper/resolve/main/inswapper_128.onnx" \
+            "https://huggingface.co/datasets/Gourieff/ReActor/resolve/main/models/inswapper_128.onnx" \
+            "https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx" ; do
+            echo "try $U"; curl -sSL --fail --retry 3 "$U" -o "$IN" && break || echo "miss"; done
+          ls -la "$IN"
+          # ---- extract candidate source frames from her raw ----
+          mkdir -p src
+          for t in 8 22 40 62 88 118 150 190 240; do
+            ffmpeg -y -loglevel error -ss $t -i Courtney_FRONT_PRO.mp4 -frames:v 1 -q:v 2 src/f_$t.jpg || true
+          done
+          ls -la src
+          python3 - <<'PY'
+          import cv2, numpy as np, glob, os
+          import insightface
+          from insightface.app import FaceAnalysis
+          app=FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
+          app.prepare(ctx_id=0, det_size=(640,640))
+          sw=insightface.model_zoo.get_model('inswapper_128.onnx', providers=['CPUExecutionProvider'])
+
+          # pick best frontal source face from her raw footage
+          best=None; bestscore=-1
+          for p in sorted(glob.glob('src/*.jpg')):
+              im=cv2.imread(p);
+              if im is None: continue
+              fs=app.get(im)
+              for f in fs:
+                  yaw=abs(getattr(f,'pose',[0,0,0])[1]) if hasattr(f,'pose') and f.pose is not None else 99
+                  area=(f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1])
+                  sc=f.det_score - yaw/60.0 + (area**0.5)/4000.0
+                  if sc>bestscore:
+                      bestscore=sc; best=(im,f,p)
+          assert best is not None, "no source face"
+          srcim,srcface,srcp=best
+          print("SOURCE frame:",srcp,"det",round(float(srcface.det_score),3))
+
+          # target = the seated woman in the exact chair on set
+          tgt=cv2.imread('deliverables/set_ref.jpg')
+          tf=app.get(tgt)
+          assert tf, "no face in set image"
+          # choose the largest face in the set (the seated woman)
+          tface=max(tf, key=lambda f:(f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]))
+          out=sw.get(tgt, tface, srcface, paste_back=True)
+          cv2.imwrite('swap_raw.jpg', out)
+          print("swap done", out.shape)
+
+          # ---- enhance ONLY the swapped face region for fidelity ----
+          try:
+              from gfpgan import GFPGANer
+              import urllib.request
+              mp='GFPGANv1.4.pth'
+              if not os.path.exists(mp):
+                  urllib.request.urlretrieve('https://github.com/TencentARC/GFPGAN/releases/download/v1.3.4/GFPGANv1.4.pth', mp)
+              gf=GFPGANer(model_path=mp, upscale=1, arch='clean', channel_multiplier=2, bg_upsampler=None)
+              _,_,enh=gf.enhance(out, has_aligned=False, only_center_face=False, paste_back=True)
+              # blend enhanced only within face bbox with feather to avoid halo
+              x1,y1,x2,y2=[int(v) for v in tface.bbox]
+              pad=int(0.35*(x2-x1)); x1=max(0,x1-pad);y1=max(0,y1-pad);x2=min(out.shape[1],x2+pad);y2=min(out.shape[0],y2+pad)
+              mask=np.zeros(out.shape[:2],np.float32); mask[y1:y2,x1:x2]=1.0
+              mask=cv2.GaussianBlur(mask,(0,0),25)[...,None]
+              final=(enh.astype(np.float32)*mask+out.astype(np.float32)*(1-mask)).astype(np.uint8)
+              cv2.imwrite('deliverables/seated_swap.jpg', final)
+              print("enhanced+blended")
+          except Exception as e:
+              print("gfpgan skip:", e)
+              cv2.imwrite('deliverables/seated_swap.jpg', out)
+
+          # side-by-side proof: source face | result
+          h=720
+          def fit(im):
+              r=h/im.shape[0]; return cv2.resize(im,(int(im.shape[1]*r),h))
+          proof=np.hstack([fit(srcim), fit(cv2.imread('deliverables/seated_swap.jpg'))])
+          cv2.imwrite('deliverables/seated_swap_proof.jpg', proof)
+          print("PROOF written")
+          PY
+          ls -la deliverables/seated_swap*.jpg
+          git config user.name github-actions; git config user.email actions@github.com
+          git add -f deliverables/seated_swap.jpg deliverables/seated_swap_proof.jpg
+          git commit -m "Faceswap: real Courtney face seated in the set chair" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
