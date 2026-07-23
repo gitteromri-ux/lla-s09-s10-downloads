@@ -1,0 +1,45 @@
+name: Matte proto (real face preserved)
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  matte:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: Matte real Courtney
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          pip3 install --quiet "rembg[cpu]" pillow onnxruntime
+          git lfs install
+          git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          SRC=Courtney_FRONT_PRO.mp4
+          # calm closed-mouth-ish frame
+          ffmpeg -y -loglevel error -ss 70 -i "$SRC" -frames:v 1 -q:v 2 her_raw.png
+          python3 - <<'PY'
+          from rembg import remove, new_session
+          from PIL import Image
+          sess=new_session("isnet-general-use")
+          im=Image.open("her_raw.png").convert("RGBA")
+          cut=remove(im, session=sess)   # her REAL pixels, transparent bg
+          cut.save("her_cut.png")
+          # composite over a warm study-gradient placeholder to verify her face is untouched
+          W,H=cut.size
+          bg=Image.new("RGB",(W,H))
+          px=bg.load()
+          for y in range(H):
+              f=y/H
+              # warm brown study gradient
+              r=int(70+40*f); g=int(48+28*f); b=int(30+18*f)
+              for x in range(W): px[x,y]=(r,g,b)
+          bg=bg.convert("RGBA")
+          bg.alpha_composite(cut)
+          bg.convert("RGB").save("deliverables/matte_proto.jpg", quality=92)
+          cut.save("deliverables/her_cutout.png")
+          print("matte done", cut.size)
+          PY
+          git config user.name github-actions; git config user.email actions@github.com
+          git add deliverables/matte_proto.jpg deliverables/her_cutout.png
+          git commit -m "Matte proto: real Courtney face preserved on transparent + study bg" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
