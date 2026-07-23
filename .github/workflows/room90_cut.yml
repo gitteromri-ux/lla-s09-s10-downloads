@@ -1,0 +1,99 @@
+name: ROOM 90 (real-room 90s, no set)
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: Setup (base = her REAL room footage)
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs >/dev/null
+          pip3 install --quiet fonttools pillow
+          git lfs install
+          git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          cp Courtney_FRONT_PRO.mp4 base.mp4
+          ffprobe -v error -show_entries format=duration:stream=width,height -of default=noprint_wrappers=1 base.mp4 || true
+          mkdir -p fonts
+          curl -sL --fail -o Fraunces_var.ttf "https://github.com/google/fonts/raw/main/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
+          curl -sL --fail -o Inter_var.ttf "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
+          fonttools varLib.instancer -q -o fonts/Inter-Bold.ttf Inter_var.ttf wght=700 opsz=32
+          fonttools varLib.instancer -q -o fonts/Fraunces-Display.ttf Fraunces_var.ttf wght=480 opsz=144 SOFT=0 WONK=0
+          # room tone from a quiet stretch of her real footage
+          ffmpeg -y -loglevel error -ss 102.30 -t 3.20 -i base.mp4 -vn -c:a pcm_s16le tone.wav || ffmpeg -y -loglevel error -f lavfi -t 3.2 -i anullsrc=r=48000:cl=stereo -c:a pcm_s16le tone.wav
+          for c in cta1 cta2 cta3; do cp "assets/brand_v3/${c}_v2.png" "${c}.png" || true; done
+          cp assets/brand_v3/endcard_v3.png end.png || true
+          # noise-screens insert (non-fatal)
+          curl -sS -L --retry 3 "https://media.githubusercontent.com/media/${{ github.repository }}/main/deliverables/fetched/asset_1.mp4" -o noise_screens.mp4 || echo "no noise_screens"
+          # Artlist b-roll (non-fatal; missing clips fall back to her room footage in the builder)
+          python3 - <<'PYA'
+          import json, subprocess, os
+          try:
+              m=json.load(open("production/artlist/broll_map.json"))
+          except Exception as e:
+              m={}; print("no broll_map",e)
+          for name,url in m.items():
+              try:
+                  subprocess.run(["curl","-sSL","--fail","--retry","3",url,"-o",f"{name}.mp4"],check=True)
+                  print("b-roll ok:",name, os.path.getsize(f"{name}.mp4"))
+              except Exception as e:
+                  print("b-roll miss (will fall back to her room footage):",name)
+          PYA
+      - name: Build cut + captions + headlines (same edit, real-room base)
+        run: |
+          set -e
+          export ENERGY=0
+          cp scripts/build_body.py build_body.py 2>/dev/null || true
+          python3 build_body.py
+      - name: Final encode 90s (captions + music arc + room tone)
+        run: |
+          set -e
+          python3 - <<'PYEOF'
+          import json, subprocess, math
+          mk=json.load(open("marks.json"))
+          def probe(f): return float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",f],capture_output=True,text=True).stdout)
+          subprocess.run(["ffmpeg","-y","-loglevel","error","-i","cut.mp4",
+            "-vf","subtitles=caps.ass:fontsdir=fonts,noise=alls=4:allf=t",
+            "-c:v","libx264","-crf","16","-preset","fast","-pix_fmt","yuv420p",
+            "-c:a","aac","-ar","48000","-ac","2","captioned.mp4"],check=True)
+          D=probe("captioned.mp4")
+          def chain(f):
+              n=max(1,math.ceil(math.log(f)/math.log(2))); e=f**(1/n)
+              return ",".join([f"atempo={e:.6f}"]*n)
+          for name,T in [("Courtney_ROOM_90",90.0)]:
+              f=D/T
+              tp=mk["proof"]/f; tm=mk.get("monta",mk["close"])/f; te=mk["end"]/f
+              vol=(f"if(lt(t,{tp}),0.20,"
+                   f"if(lt(t,{tm}),0.20+0.14*min(1,(t-{tp})/2.5),"
+                   f"if(lt(t,{te}),0.36+0.28*min(1,(t-{tm})/1.8),0.66)))")
+              fc=(f"[0:v]setpts=PTS/{f:.6f}[v];"
+                  f"[0:a]{chain(f)}[vs];[vs]asplit=2[voice][sc];"
+                  f"[1:a]highpass=f=38,treble=g=2:f=8000,volume=volume='{vol}':eval=frame,afade=t=out:st={T-0.9}:d=0.9[m1];"
+                  f"[m1][sc]sidechaincompress=threshold=0.03:ratio=4:attack=25:release=380[mus];"
+                  f"[2:a]volume=0.5,afade=t=out:st={T-1.5}:d=1.5[tone];"
+                  f"[voice][mus][tone]amix=inputs=3:duration=first:normalize=0,dynaudnorm=f=200:g=7[aout]")
+              subprocess.run(["ffmpeg","-y","-loglevel","error","-i","captioned.mp4",
+                "-stream_loop","-1","-i","assets/music_bed_0717.mp3","-stream_loop","-1","-i","tone.wav",
+                "-filter_complex",fc,"-map","[v]","-map","[aout]","-t",f"{T:.3f}",
+                "-r","30","-c:v","libx264","-crf","16","-preset","fast","-pix_fmt","yuv420p",
+                "-c:a","aac","-b:a","256k","-movflags","+faststart",f"{name}.mp4"],check=True)
+              print(name,"->",round(probe(f'{name}.mp4'),2),"s")
+          PYEOF
+          mkdir -p deliverables/room
+          # sendable review copy (<30MB) + QC frames
+          ffmpeg -y -loglevel error -i Courtney_ROOM_90.mp4 -vf scale=-2:720 -c:v libx264 -b:v 2050k -maxrate 2300k -bufsize 4M -preset veryfast -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart deliverables/room/ROOM_90_review.mp4
+          for p in 2 8 16 24 34 44 52 62 72 82 88; do ffmpeg -y -loglevel error -ss $p -i Courtney_ROOM_90.mp4 -frames:v 1 f_$p.jpg || true; done
+          sudo apt-get install -y -qq imagemagick >/dev/null 2>&1 || true
+          montage f_*.jpg -tile 4x3 -geometry 380x214+3+3 -background '#0c1018' deliverables/room/ROOM_90_map.jpg || true
+          ls -la deliverables/room/
+          git config user.name github-actions; git config user.email actions@github.com
+          printf '\ndeliverables/room/*.mp4 -filter -diff -merge\n' >> .gitattributes
+          git add -f .gitattributes deliverables/room/ROOM_90_review.mp4 deliverables/room/ROOM_90_map.jpg
+          git commit -m "ROOM 90s: her real room footage, same edit/b-roll/captions/music" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && GIT_LFS_SKIP_PUSH=1 git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: Courtney_ROOM_90, path: "Courtney_ROOM_90.mp4", if-no-files-found: warn }
