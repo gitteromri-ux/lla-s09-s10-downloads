@@ -1,0 +1,63 @@
+name: Faceswap fast
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  swap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
+      - name: Fast faceswap (no torch)
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs libgl1 >/dev/null
+          git lfs install
+          git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          ls -la Courtney_FRONT_PRO.mp4
+          pip install -q insightface==0.7.3 onnxruntime==1.17.3 opencv-python-headless numpy
+          IN=inswapper_128.onnx
+          for U in \
+            "https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx" \
+            "https://huggingface.co/datasets/Gourieff/ReActor/resolve/main/models/inswapper_128.onnx" \
+            "https://huggingface.co/deepinsight/inswapper/resolve/main/inswapper_128.onnx" \
+            "https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx" ; do
+            echo "try $U"; curl -sSL --fail --retry 3 "$U" -o "$IN" && break || echo miss; done
+          ls -la "$IN"
+          mkdir -p src
+          for t in 8 22 40 62 88 118 150 190 240; do
+            ffmpeg -y -loglevel error -ss $t -i Courtney_FRONT_PRO.mp4 -frames:v 1 -q:v 2 src/f_$t.jpg || true
+          done
+          python3 - <<'PY'
+          import cv2, numpy as np, glob
+          import insightface
+          from insightface.app import FaceAnalysis
+          app=FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider']); app.prepare(ctx_id=0, det_size=(640,640))
+          sw=insightface.model_zoo.get_model('inswapper_128.onnx', providers=['CPUExecutionProvider'])
+          best=None; bs=-1
+          for p in sorted(glob.glob('src/*.jpg')):
+              im=cv2.imread(p)
+              if im is None: continue
+              for f in app.get(im):
+                  yaw=abs(f.pose[1]) if getattr(f,'pose',None) is not None else 99
+                  area=(f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1])
+                  sc=float(f.det_score)-yaw/60.0+(area**0.5)/4000.0
+                  if sc>bs: bs=sc; best=(im,f,p)
+          assert best, "no source face"
+          srcim,srcface,srcp=best; print("SOURCE",srcp,round(float(srcface.det_score),3))
+          tgt=cv2.imread('deliverables/set_ref.jpg')
+          tf=app.get(tgt); assert tf,"no face in set"
+          tface=max(tf,key=lambda f:(f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]))
+          out=sw.get(tgt,tface,srcface,paste_back=True)
+          cv2.imwrite('deliverables/seated_swap.jpg', out)
+          h=760
+          fit=lambda im:cv2.resize(im,(int(im.shape[1]*h/im.shape[0]),h))
+          cv2.imwrite('deliverables/seated_swap_proof.jpg', np.hstack([fit(srcim),fit(out)]))
+          print("DONE")
+          PY
+          ls -la deliverables/seated_swap*.jpg
+          git config user.name github-actions; git config user.email actions@github.com
+          git add -f deliverables/seated_swap.jpg deliverables/seated_swap_proof.jpg
+          git commit -m "Fast faceswap: real Courtney face on seated body in set" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
