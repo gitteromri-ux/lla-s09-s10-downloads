@@ -77,7 +77,7 @@ jobs:
                   f"[1:a]highpass=f=38,treble=g=2:f=8000,volume=volume='{vol}':eval=frame,afade=t=out:st={T-0.6}:d=0.6[m1];"
                   f"[m1][sc]sidechaincompress=threshold=0.03:ratio=4:attack=25:release=380[mus];"
                   f"[2:a]volume=0.5,afade=t=out:st={T-1.2}:d=1.2[tone];"
-                  f"[voice][mus][tone]amix=inputs=3:duration=first:normalize=0,dynaudnorm=f=200:g=7[aout]")
+                  f"[voice][mus][tone]amix=inputs=3:duration=first:normalize=0,dynaudnorm=f=200:g=7,apad[aout]")
               subprocess.run(["ffmpeg","-y","-loglevel","error","-i","captioned.mp4",
                 "-stream_loop","-1","-i","assets/music_bed_0717.mp3","-stream_loop","-1","-i","tone.wav",
                 "-filter_complex",fc,"-map","[v]","-map","[aout]","-t",f"{T:.3f}",
@@ -88,11 +88,19 @@ jobs:
           subprocess.run(["ffmpeg","-y","-loglevel","error","-i","assets/inserts/LLA_Outro_Card.mp4",
             "-vf","scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p",
             "-c:v","libx264","-crf","16","-preset","fast","-c:a","aac","-b:a","256k","-ar","48000","-ac","2","outro_norm.mp4"],check=True)
-          with open("cc.txt","w") as f: f.write("file 'Courtney_ROOM_body.mp4'\nfile 'outro_norm.mp4'\n")
-          # -c copy: her body is byte-identical to the proven encode; only the outro is appended (no re-sync risk)
-          subprocess.run(["ffmpeg","-y","-loglevel","error","-f","concat","-safe","0","-i","cc.txt",
-            "-c","copy","-movflags","+faststart","Courtney_ROOM_90.mp4"],check=True)
-          print("FINAL Courtney_ROOM_90 ->", round(probe("Courtney_ROOM_90.mp4"),2),"s")
+          # concat FILTER (re-encode) so BOTH audio and video are continuous & equal-length across the join
+          subprocess.run(["ffmpeg","-y","-loglevel","error","-i","Courtney_ROOM_body.mp4","-i","outro_norm.mp4",
+            "-filter_complex","[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]","-map","[v]","-map","[a]",
+            "-r","30","-c:v","libx264","-crf","16","-preset","fast","-pix_fmt","yuv420p",
+            "-c:a","aac","-b:a","256k","-ar","48000","-ac","2","-movflags","+faststart","Courtney_ROOM_90.mp4"],check=True)
+          # HARD GATE: audio and video streams must be equal length (no silent tail / drift), else fail the build
+          def sdur(f,w):
+              o=subprocess.run(["ffmpeg","-i",f,"-map","0:"+w,"-f","null","-"],capture_output=True,text=True).stderr
+              import re; mm=re.findall(r"time=(\d+):(\d+):(\d+\.\d+)",o); h,mi,s=mm[-1]; return int(h)*3600+int(mi)*60+float(s)
+          vd=sdur("Courtney_ROOM_90.mp4","v"); ad=sdur("Courtney_ROOM_90.mp4","a")
+          print(f"FINAL Courtney_ROOM_90 -> video {vd:.2f}s / audio {ad:.2f}s / A-V {(ad-vd)*1000:.0f}ms")
+          assert abs(ad-vd) < 0.20, f"A/V length mismatch {ad-vd:.2f}s — refusing to ship"
+
           PYEOF
           mkdir -p deliverables/room
           # sendable review copy (<30MB) + QC frames
