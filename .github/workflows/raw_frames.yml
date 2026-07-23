@@ -1,0 +1,26 @@
+name: Raw Courtney frames
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  frames:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: Extract raw frames
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs imagemagick
+          git lfs install
+          git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          SRC=Courtney_FRONT_PRO.mp4
+          ls -la "$SRC"; ffprobe -v error -show_entries format=duration -of csv=p=0 "$SRC" || true
+          mkdir -p rawf; i=0
+          for t in 40 70 130 170 200 380; do i=$((i+1)); ffmpeg -y -loglevel error -ss "$t" -i "$SRC" -frames:v 1 -q:v 2 "rawf/raw_${i}_t${t}.jpg" || true; done
+          ls -la rawf
+          montage rawf/*.jpg -tile 3x2 -geometry 640x360+6+6 -background '#101828' deliverables/raw_courtney.jpg
+          cp rawf/raw_3_t130.jpg deliverables/raw_hero.jpg 2>/dev/null || true
+          git config user.name github-actions; git config user.email actions@github.com
+          git add deliverables/raw_courtney.jpg deliverables/raw_hero.jpg
+          git commit -m "Raw Courtney frames for reseat prototype" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
