@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Personalix Editor · RTL</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a0a; color: #f5f5f5;
+    font-family: "Segoe UI", "Rubik", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+    padding: 40px 20px 80px; line-height: 1.7;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 28px; font-weight: 600; margin-bottom: 6px; color: #d4a373; }
+  .lede { color: #9a9a9a; font-size: 14px; margin-bottom: 28px; }
+  .card {
+    background: #141414; border: 1px solid #1f1f1f; border-radius: 10px;
+    padding: 22px 24px; margin-bottom: 16px;
+  }
+  /* logical properties auto-flip in RTL — no LTR/RTL duplication needed */
+  .card h2 { font-size: 17px; margin-bottom: 8px; }
+  .card p  { color: #cfcfcf; font-size: 15px; }
+  ul { list-style: none; margin-top: 10px; }
+  li { padding: 8px 0; border-bottom: 1px solid #222; padding-inline-start: 4px; }
+  li::before { content: "◂ "; color: #d4a373; }
+  li:last-child { border-bottom: none; }
+  .num { color: #d4a373; font-weight: 700; margin-inline-end: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Personalix Editor — עדכון</h1>
+  <p class="lede">דף הדגמה לתמיכת RTL · עברית · ללא תוספים וללא MCP</p>
+
+  <div class="card">
+    <h2>אודות</h2>
+    <p>התיאור החדש של „Personalix Editor" מדגיש מסירה של חמש פעולות ה‑MVP,
+       ומציג הצעה משופרת לניסוח: החלפת הטקסט, שמירת המקור, וקישור אופציונלי.</p>
+  </div>
+
+  <div class="card">
+    <h2>חמש פעולות ה‑MVP</h2>
+    <ul>
+      <li><span class="num">1.</span>החלפת הטקסט</li>
+      <li><span class="num">2.</span>שמירת המקור</li>
+      <li><span class="num">3.</span>קישור אופציונלי</li>
+      <li><span class="num">4.</span>תצוגה מקדימה</li>
+      <li><span class="num">5.</span>אישור ופרסום</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>בדיקות</h2>
+    <p>נגישות, כיווניות RTL, ובדיקת UX — כולל טקסט מעורב עם מספרים כמו 09/10
+       ומונחים באנגלית כמו Personalix שנשארים בכיוון הנכון אוטומטית.</p>
+  </div>
+</div>
+</body>
+</html>
