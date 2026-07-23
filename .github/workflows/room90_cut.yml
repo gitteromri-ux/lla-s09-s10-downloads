@@ -46,6 +46,7 @@ jobs:
         run: |
           set -e
           export ENERGY=0
+          cp assets/inserts/instructors_8k.mp4 instructors.mp4 || true
           cp scripts/build_body.py build_body.py 2>/dev/null || true
           python3 build_body.py
       - name: Final encode 90s (captions + music arc + room tone)
@@ -63,24 +64,34 @@ jobs:
           def chain(f):
               n=max(1,math.ceil(math.log(f)/math.log(2))); e=f**(1/n)
               return ",".join([f"atempo={e:.6f}"]*n)
-          for name,T in [("Courtney_ROOM_90",90.0)]:
+          OUTRO=probe("assets/inserts/LLA_Outro_Card.mp4")
+          for name,T in [("Courtney_ROOM_body", round(90.0-OUTRO,2))]:
               f=D/T
               tp=mk["proof"]/f; tm=mk.get("monta",mk["close"])/f; te=mk["end"]/f
-              vol=(f"if(lt(t,{tp}),0.20,"
-                   f"if(lt(t,{tm}),0.20+0.14*min(1,(t-{tp})/2.5),"
-                   f"if(lt(t,{te}),0.36+0.28*min(1,(t-{tm})/1.8),0.66)))")
+              # dramatic build: music rises across the film, peaks into the instructors/offer culmination
+              vol=(f"if(lt(t,{tp}),0.22,"
+                   f"if(lt(t,{tm}),0.22+0.18*min(1,(t-{tp})/2.5),"
+                   f"if(lt(t,{te}),0.40+0.34*min(1,(t-{tm})/1.8),0.80)))")
               fc=(f"[0:v]setpts=PTS/{f:.6f}[v];"
                   f"[0:a]{chain(f)}[vs];[vs]asplit=2[voice][sc];"
-                  f"[1:a]highpass=f=38,treble=g=2:f=8000,volume=volume='{vol}':eval=frame,afade=t=out:st={T-0.9}:d=0.9[m1];"
+                  f"[1:a]highpass=f=38,treble=g=2:f=8000,volume=volume='{vol}':eval=frame,afade=t=out:st={T-0.6}:d=0.6[m1];"
                   f"[m1][sc]sidechaincompress=threshold=0.03:ratio=4:attack=25:release=380[mus];"
-                  f"[2:a]volume=0.5,afade=t=out:st={T-1.5}:d=1.5[tone];"
+                  f"[2:a]volume=0.5,afade=t=out:st={T-1.2}:d=1.2[tone];"
                   f"[voice][mus][tone]amix=inputs=3:duration=first:normalize=0,dynaudnorm=f=200:g=7[aout]")
               subprocess.run(["ffmpeg","-y","-loglevel","error","-i","captioned.mp4",
                 "-stream_loop","-1","-i","assets/music_bed_0717.mp3","-stream_loop","-1","-i","tone.wav",
                 "-filter_complex",fc,"-map","[v]","-map","[aout]","-t",f"{T:.3f}",
                 "-r","30","-c:v","libx264","-crf","16","-preset","fast","-pix_fmt","yuv420p",
-                "-c:a","aac","-b:a","256k","-movflags","+faststart",f"{name}.mp4"],check=True)
-              print(name,"->",round(probe(f'{name}.mp4'),2),"s")
+                "-c:a","aac","-b:a","256k","-ar","48000","-ac","2","-movflags","+faststart",f"{name}.mp4"],check=True)
+              print(name,"->",round(probe(f'{name}.mp4'),2),"s (outro", round(OUTRO,2),"appended as-is)")
+          # normalize the Drive outro to match, then concat AS-IS (its own audio) → 90s
+          subprocess.run(["ffmpeg","-y","-loglevel","error","-i","assets/inserts/LLA_Outro_Card.mp4",
+            "-vf","scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p",
+            "-c:v","libx264","-crf","16","-preset","fast","-c:a","aac","-b:a","256k","-ar","48000","-ac","2","outro_norm.mp4"],check=True)
+          with open("cc.txt","w") as f: f.write("file 'Courtney_ROOM_body.mp4'\nfile 'outro_norm.mp4'\n")
+          subprocess.run(["ffmpeg","-y","-loglevel","error","-f","concat","-safe","0","-i","cc.txt",
+            "-c:v","libx264","-crf","16","-preset","fast","-pix_fmt","yuv420p","-c:a","aac","-b:a","256k","-movflags","+faststart","Courtney_ROOM_90.mp4"],check=True)
+          print("FINAL Courtney_ROOM_90 ->", round(probe("Courtney_ROOM_90.mp4"),2),"s")
           PYEOF
           mkdir -p deliverables/room
           # sendable review copy (<30MB) + QC frames

@@ -10,25 +10,25 @@ SUBLEN=3.2-0.6*ENERGY; CARDD=1.6-0.2*ENERGY; INTRO=1.4; ENDD=2.6
 # FULL SCRIPT — every section, best take, b-roll locked to the exact spoken word
 ACTS=[
   dict(name="hook", s=39.60, e=70.55,
-       heads=[(44.16,"LONGEVITY ADVICE IS EVERYWHERE."),(58.90,"YOUR DIRECT PATH TO LONGEVITY")],
+       heads=[(44.16,"LONGEVITY ADVICE IS EVERYWHERE."),(58.90,"YOUR DIRECT PATH TO A LONGER, BETTER LIFE.")],
        broll=[("noise_screens",44.16,4.10),("site_yoga",53.90,3.10)]),
   dict(name="why", s=73.90, e=101.55,
-       heads=[(74.02,"WHY LONGEVITY NEVER STUCK FOR YOU")], broll=[]),
+       heads=[], broll=[]),
   dict(name="pillars", s=127.45, e=160.65,
-       heads=[(128.40,"THE SIX PILLARS OF A LONGER LIFE")],
+       heads=[(128.40,"MASTER THE SIX PILLARS FOR A LONGER, BETTER LIFE.")],
        broll=[("site_nutrition",137.14,0.90),("site_sleep",138.12,1.00),
               ("swimmer_dawn",139.20,1.45),("site_supplements",140.72,1.70),
               ("site_wearables",144.14,1.90)]),
   dict(name="proof", s=165.45, e=189.75,
-       heads=[(171.00,"+14 YEARS LIFE TRAJECTORY")],
+       heads=[(171.00,"YOUR BIOMARKERS. YOUR DATA. YOUR LONGEVITY PROTOCOL.")],
        broll=[("data_curve",171.20,4.60)]),
   dict(name="academy", s=195.85, e=221.00,
-       heads=[(196.00,"LONGEVITY LIFE ACADEMY · 18 LIVE SESSION COURSE")],
-       broll=[("online_session",205.16,3.30),("oximeter_data",213.40,4.40)]),
+       heads=[(196.00,"THE LONGEVITY BLUEPRINT — TAUGHT BY LONGEVITY'S LEADING EXPERTS.")],
+       broll=[("instructors",197.4,4.20),("online_session",205.16,3.30),("oximeter_data",213.40,4.40)]),
   dict(name="close", s=377.55, e=401.85,
-       heads=[(378.00,"YOUR LONGEVITY BLUEPRINT")], broll=[]),
+       heads=[], broll=[]),
 ]
-CARDS_AFTER={"pillars":"cta1","proof":"cta2","academy":"cta3"}
+CARDS_AFTER={"academy":"cta3"}
 idx=0; PLAN=[]; SEG=[]; out_t=0.0; card_idxs=[]; heads=[]; music_marks={}
 def enc_her(ss,de):
     global idx,out_t; idx+=1; PLAN.append(de); SEG.append((ss,ss+de,out_t)); out_t+=de
@@ -149,7 +149,7 @@ for act in ACTS:
     play(cur,act["e"])
     if act["name"] in CARDS_AFTER: enc_card(f'{CARDS_AFTER[act["name"]]}.png',CARDD+0.4)
 music_marks["end"]=out_t
-enc_card("end.png",ENDD)
+# NOTE: no built end card — the approved Drive outro (LLA_Outro_Card.mp4) is appended as-is post-encode
 def dipfade(k,mode):
     fn=f"seg/{k:03d}.mp4"
     d=float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",fn],capture_output=True,text=True).stdout)
