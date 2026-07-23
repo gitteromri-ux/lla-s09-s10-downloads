@@ -1,0 +1,40 @@
+name: Broll board
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  b:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: Download pool + numbered board
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg imagemagick >/dev/null
+          mkdir -p board
+          python3 - <<'PY'
+          import json, subprocess, os
+          m=json.load(open("production/artlist/broll_map.json"))
+          # noise_screens fallback to committed asset
+          items=list(m.items())
+          for i,(name,url) in enumerate(items,1):
+              ok=False
+              try:
+                  subprocess.run(["curl","-sSL","--fail","--retry","3","--max-time","90",url,"-o",f"c.mp4"],check=True); ok=True
+              except Exception:
+                  try:
+                      subprocess.run(["curl","-sSL","--fail","--retry","2","https://media.githubusercontent.com/media/gitteromri-ux/lla-s09-s10-downloads/main/deliverables/fetched/asset_1.mp4","-o","c.mp4"],check=True); ok=True
+                  except Exception: pass
+              if ok:
+                  subprocess.run(["ffmpeg","-y","-loglevel","error","-ss","1","-i","c.mp4","-frames:v","1",
+                    "-vf",f"scale=420:236,drawtext=text='{i}. {name}':fontcolor=yellow:fontsize=22:x=8:y=8:box=1:boxcolor=black@0.65",
+                    f"board/{i:02d}.jpg"])
+                  print("ok",i,name)
+              else: print("MISS",name)
+          PY
+          montage board/*.jpg -tile 3x -geometry 420x236+5+5 -background '#0c1018' deliverables/room/broll_board.jpg
+          identify deliverables/room/broll_board.jpg
+          git config user.name github-actions; git config user.email actions@github.com
+          git add -f deliverables/room/broll_board.jpg
+          git commit -m "B-roll pool board" || echo nochange
+          for n in 1 2 3 4 5; do git fetch origin main && git merge -s ours -m keep origin/main && GIT_LFS_SKIP_PUSH=1 git push origin HEAD:main && break || (git merge --abort 2>/dev/null; sleep $((2**n))); done
