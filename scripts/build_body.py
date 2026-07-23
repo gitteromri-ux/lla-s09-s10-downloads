@@ -147,7 +147,7 @@ for act in ACTS:
     for clip,bs,bd in sorted(act["broll"],key=lambda b:b[1]):
         play(cur,bs); enc_broll(clip,bd,bs); cur=bs+bd
     play(cur,act["e"])
-    if act["name"] in CARDS_AFTER: enc_anim_card(CARDS_AFTER[act["name"]],CARDD)
+    if act["name"] in CARDS_AFTER: enc_card(f'{CARDS_AFTER[act["name"]]}.png',CARDD+0.4)
 music_marks["end"]=out_t
 enc_card("end.png",ENDD)
 def dipfade(k,mode):
