@@ -1,0 +1,53 @@
+name: Onset composite (real face, clean)
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - name: Composite real Courtney on set
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg git-lfs
+          pip3 install --quiet "rembg[cpu]" pillow onnxruntime numpy
+          git lfs install; git lfs pull --include="Courtney_FRONT_PRO.mp4"
+          ffmpeg -y -loglevel error -ss 70 -i Courtney_FRONT_PRO.mp4 -frames:v 1 -q:v 1 her.png
+          python3 - <<'PY'
+          from rembg import remove, new_session
+          from PIL import Image, ImageFilter, ImageEnhance, ImageChops
+          import numpy as np
+          W,H=1920,1080
+          her_s=new_session("birefnet-general"); per_s=new_session("u2net")
+          her=Image.open("her.png").convert("RGBA")
+          herC=remove(her, session=her_s, post_process_mask=True)
+          r,g,b,a=herC.split(); a=a.filter(ImageFilter.GaussianBlur(0.7)); herC=Image.merge("RGBA",(r,g,b,a)).crop(a.getbbox())
+          rr,gg,bb,aa=herC.split(); rgb=Image.merge("RGB",(rr,gg,bb)); rgb=ImageEnhance.Contrast(rgb).enhance(1.05)
+          rr,gg,bb=rgb.split(); rr=rr.point(lambda v:min(255,int(v*1.05))); bb=bb.point(lambda v:int(v*0.93)); herC=Image.merge("RGBA",(rr,gg,bb,aa))
+          plate=Image.open("deliverables/reseat_proto.png").convert("RGB").resize((W,H))
+          mask=remove(plate.convert("RGBA"), session=per_s, only_mask=True)
+          md=Image.fromarray(np.array(mask)).filter(ImageFilter.MaxFilter(21)).filter(ImageFilter.GaussianBlur(10))
+          mm=(np.array(md).astype(float)/255.0)[...,None]; blur=plate.filter(ImageFilter.GaussianBlur(55))
+          clean=Image.fromarray((np.array(plate)*(1-mm)+np.array(blur)*mm).astype('uint8')); clean.save("deliverables/plate_clean.jpg",quality=92)
+          def compose(head_frac,cx,topy):
+              p=clean.copy().convert("RGBA"); hh=int(H*head_frac); hw=int(herC.width*hh/herC.height); hp=herC.resize((hw,hh))
+              x=int(W*cx-hw/2); y=int(H*topy)
+              sh=Image.new("RGBA",(W,H),(0,0,0,0)); blk=Image.new("RGBA",(hw,hh),(6,4,2,255)); blk.putalpha(hp.split()[3])
+              sh.alpha_composite(blk,(x+10,y+24)); sh=sh.filter(ImageFilter.GaussianBlur(26)); sh=ImageChops.multiply(sh,Image.new("RGBA",(W,H),(255,255,255,110)))
+              p.alpha_composite(sh); p.alpha_composite(hp,(x,y)); return p.convert("RGB")
+          compose(0.72,0.50,0.09).save("deliverables/onset_a.jpg",quality=92)
+          compose(0.66,0.50,0.12).save("deliverables/onset_b.jpg",quality=92)
+          compose(0.60,0.50,0.15).save("deliverables/onset_c.jpg",quality=92)
+          print("done")
+          PY
+          mkdir -p /tmp/out && cp deliverables/onset_a.jpg deliverables/onset_b.jpg deliverables/onset_c.jpg deliverables/plate_clean.jpg /tmp/out/
+          git config user.name github-actions; git config user.email actions@github.com
+          for n in 1 2 3 4 5; do
+            git fetch origin main && git checkout -f origin/main
+            cp /tmp/out/onset_a.jpg deliverables/onset_a.jpg; cp /tmp/out/onset_b.jpg deliverables/onset_b.jpg
+            cp /tmp/out/onset_c.jpg deliverables/onset_c.jpg; cp /tmp/out/plate_clean.jpg deliverables/plate_clean.jpg
+            git add deliverables/onset_a.jpg deliverables/onset_b.jpg deliverables/onset_c.jpg deliverables/plate_clean.jpg
+            git commit -m "Onset composite images" || true
+            git push origin HEAD:main && break || sleep $((2**n))
+          done
