@@ -85,8 +85,11 @@ jobs:
                 "-c:a","aac","-b:a","256k","-ar","48000","-ac","2","-movflags","+faststart",f"{name}.mp4"],check=True)
               print(name,"->",round(probe(f'{name}.mp4'),2),"s (outro", round(OUTRO,2),"appended as-is)")
           # normalize the Drive outro to match, then concat AS-IS (its own audio) → 90s
+          # the Drive outro is a SILENT animation — give it a matching silent audio track so A/V stay equal-length
           subprocess.run(["ffmpeg","-y","-loglevel","error","-i","assets/inserts/LLA_Outro_Card.mp4",
+            "-f","lavfi","-i","anullsrc=r=48000:cl=stereo",
             "-vf","scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p",
+            "-map","0:v","-map","1:a","-shortest",
             "-c:v","libx264","-crf","16","-preset","fast","-c:a","aac","-b:a","256k","-ar","48000","-ac","2","outro_norm.mp4"],check=True)
           # concat FILTER (re-encode) so BOTH audio and video are continuous & equal-length across the join
           subprocess.run(["ffmpeg","-y","-loglevel","error","-i","Courtney_ROOM_body.mp4","-i","outro_norm.mp4",
