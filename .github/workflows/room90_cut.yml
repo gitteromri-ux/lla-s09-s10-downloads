@@ -65,7 +65,8 @@ jobs:
               n=max(1,math.ceil(math.log(f)/math.log(2))); e=f**(1/n)
               return ",".join([f"atempo={e:.6f}"]*n)
           OUTRO=probe("assets/inserts/LLA_Outro_Card.mp4")
-          for name,T in [("Courtney_ROOM_body", 90.0)]:
+          # NATURAL PACE: T = D means f=1.0 → NO time-stretch. Her exact filmed voice.
+          for name,T in [("Courtney_ROOM_body", round(D,2))]:
               f=D/T
               tp=mk["proof"]/f; tm=mk.get("monta",mk["close"])/f; te=mk["end"]/f
               # dramatic build: music rises across the film, peaks into the instructors/offer culmination
