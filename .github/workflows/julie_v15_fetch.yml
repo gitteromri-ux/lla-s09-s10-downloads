@@ -19,9 +19,9 @@ jobs:
           set -e
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
           pip3 install --quiet gdown
-          gdown --fuzzy "https://drive.google.com/uc?id=1aAHLQ70jzJIne7miLERBcHi5vwqEIvK3" -O FRONT.mp4
-          gdown --fuzzy "https://drive.google.com/uc?id=1g-mKR1qAwvlCHVpwvPIoEMgbS-rPrxEn" -O SPORT2.mp4
-          gdown --fuzzy "https://drive.google.com/uc?id=1H2xbKCwHbVKdQUV5nVeY5-Rd1KFaxqkN" -O LONGEVITY1.mp4
+          gdown "1aAHLQ70jzJIne7miLERBcHi5vwqEIvK3" -O FRONT.mp4
+          gdown "1g-mKR1qAwvlCHVpwvPIoEMgbS-rPrxEn" -O SPORT2.mp4
+          gdown "1H2xbKCwHbVKdQUV5nVeY5-Rd1KFaxqkN" -O LONGEVITY1.mp4
           ls -la FRONT.mp4 SPORT2.mp4 LONGEVITY1.mp4
           ffprobe -v error -show_entries format=duration,size -of default=nw=1 FRONT.mp4
       - name: Process
