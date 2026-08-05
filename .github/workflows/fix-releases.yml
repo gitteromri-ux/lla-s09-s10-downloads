@@ -1,0 +1,21 @@
+name: fix-releases
+on:
+  push:
+    branches: [fix-releases-src]
+permissions:
+  contents: write
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reassemble V17 full
+        run: |
+          cat files/V17FULL_part_* > JULIE_LLA_V17_FULL.mp4
+          echo "$(cat files/V17FULL.md5)  JULIE_LLA_V17_FULL.mp4" | md5sum -c -
+      - name: Attach assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload v17-delivery JULIE_LLA_V17_FULL.mp4 files/JULIE_LLA_V17_90S.mp4 files/JULIE_LLA_V17_60S.mp4 --repo ${{ github.repository }} --clobber
+          gh release upload v1 files/COURTNEY_LLA_MASTER.mp4 files/COURTNEY_RAW_SOURCE.mp4 --repo ${{ github.repository }} --clobber
