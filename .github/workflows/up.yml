@@ -1,0 +1,15 @@
+name: up
+on: push
+permissions:
+  contents: write
+jobs:
+  up:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: upload
+        run: |
+          gh release create julie-v23-raw-sources --repo ${{ github.repository }} --title "Julie V23 raw sources" --notes "Raw full-length sources for the V23 editor handover board" || true
+          gh release upload julie-v23-raw-sources files/* --repo ${{ github.repository }} --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
