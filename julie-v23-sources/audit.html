@@ -1,0 +1,177 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>V23 &middot; Editor line audit &mdash; which lines have footage</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--blue:#006EFF;--lblue:#5EB6FF;--ink:#F2F6FF;--bg:#05060A}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:'Hanken Grotesk',sans-serif;font-size:17px;line-height:1.5}
+header{padding:60px 4vw 32px;background:radial-gradient(1200px 500px at 20% -10%,rgba(0,110,255,.28),transparent 60%),var(--bg)}
+h1{font-family:Fraunces,serif;font-weight:700;font-size:clamp(36px,5vw,68px);line-height:1.05}
+h1 span{color:var(--lblue)}
+.sub{margin-top:14px;font-size:19px;color:#B9C6DE;max-width:960px}
+.tabs{margin-top:24px;display:flex;gap:10px;flex-wrap:wrap}
+.tabs a{padding:13px 22px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;background:#101623;border:1px solid #223;color:#C9D6EE}
+.tabs a.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.stats{margin-top:22px;display:flex;gap:14px;flex-wrap:wrap}
+.chip{background:#0C1220;border:1px solid #1B2740;border-radius:14px;padding:13px 20px;font-weight:700;font-size:16px}
+.chip b{font-size:24px;display:block}
+.chip.g b{color:#5CE49A} .chip.r b{color:#FF7B7B} .chip.y b{color:#F0B45C}
+main{padding:20px 4vw 80px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;letter-spacing:.12em;color:#8FA3C4;padding:10px 12px;border-bottom:1px solid #1B2740}
+td{padding:16px 12px;border-bottom:1px solid #131B2C;vertical-align:top}
+tr.no{background:rgba(255,80,80,.05)} tr.runon{background:rgba(240,180,92,.07)} tr.yes{background:rgba(92,228,154,.06)}
+.ln{font-family:Fraunces,serif;font-size:30px;font-weight:700;color:var(--lblue);width:56px}
+.tc{font-size:14px;color:#8FA3C4;font-weight:600;white-space:nowrap;width:96px}
+.q{font-family:Fraunces,serif;font-size:20px;color:#5EB6FF;font-weight:600;min-width:280px}
+.sc{width:250px} .sc img{width:100%;border-radius:9px;display:block;margin-bottom:7px}
+.sc span{font-size:14px;color:#AFBDD6}
+.p{display:inline-block;margin:0 6px 6px 0;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.04em;white-space:nowrap}
+.p.yes{background:#0C2A18;border:1px solid #1E6B3C;color:#5CE49A}
+.p.no{background:#2A0C0C;border:1px solid #6B1E1E;color:#FF9B9B}
+.p.run{background:#2A1B0C;border:1px solid #6B4A1E;color:#F0B45C}
+.st{width:180px} .ac{width:250px}
+.need{font-size:15px;color:#F0B45C;font-weight:600}
+.btn{display:block;text-align:center;padding:11px 13px;border-radius:10px;background:var(--blue);color:#fff;text-decoration:none;font-weight:700;font-size:14px}
+.btn.sm{display:inline-block;margin:0 8px 8px 0;background:#101B2E;border:1px solid #2A4A80;color:#8FC2FF}
+.box{margin:34px 0;padding:22px 26px;background:#0A101C;border:1px solid #1B2740;border-radius:16px}
+.box h2{font-family:Fraunces,serif;font-size:26px;margin-bottom:10px}
+.box p{color:#B9C6DE;margin-bottom:12px;max-width:960px}
+footer{padding:36px 4vw;color:#6E82A6;font-size:15px}
+@media(max-width:1000px){table,thead,tbody,tr,td,th{display:block}thead{display:none}tr{border:1px solid #1B2740;border-radius:14px;margin-bottom:14px;padding:8px}td{border:0;width:auto!important}.sc{max-width:340px}}
+</style></head><body>
+<header>
+<h1>Editor line audit &mdash; <span>which lines have footage</span></h1>
+<p class="sub">The 15 lines from the editor&rsquo;s screenshots, one row each, checked against frames pulled from the delivered V23 film at that exact timecode. Screenshot column is what is literally on screen while she says it. No guessing.</p>
+<div class="tabs"><a href="./">Source board</a><a href="./lines.html">Storyboard + lines</a><a class="on" href="./audit.html">Editor line audit</a><a href="./JULIE_V23_LINES.txt">Plain-text script</a></div>
+<div class="stats">
+<div class="chip g"><b>2</b>lines with real footage</div>
+<div class="chip r"><b>13</b>lines on talking head, no b-roll</div>
+<div class="chip y"><b>2</b>run-on lines cut by a card</div>
+<div class="chip"><b>11</b>unused b-rolls available</div>
+</div>
+</header>
+<main>
+<table>
+<thead><tr><th>#</th><th>Timecode</th><th>Line she says</th><th>What is on screen</th><th>Status</th><th>Action</th></tr></thead>
+<tbody><tr class="no">
+<td class="ln">01</td>
+<td class="tc">0:17.3<br>0:20.1</td>
+<td class="q">&ldquo;It&#x27;s a tank, and it empties by the end of a hard day.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f1.jpg" alt="frame 1" loading="lazy"><span>Julie wide, black box caption “IT’S A TANK. IT EMPTIES.”</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr><tr class="no">
+<td class="ln">02</td>
+<td class="tc">0:29.4<br>0:34.8</td>
+<td class="q">&ldquo;I didn&#x27;t out-age a man spending $2 million a year on a burst of motivation.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f2.jpg" alt="frame 2" loading="lazy"><span>Julie wide, talking head</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr><tr class="no">
+<td class="ln">03</td>
+<td class="tc">0:34.8<br>0:36.2</td>
+<td class="q">&ldquo;I did it on the opposite.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f3.jpg" alt="frame 3" loading="lazy"><span>Julie tight close-up</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr><tr class="no">
+<td class="ln">04</td>
+<td class="tc">0:36.2<br>0:43.0</td>
+<td class="q">&ldquo;Habits made so small and repeated so often, they stopped asking anything of me at all.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f4.jpg" alt="frame 4" loading="lazy"><span>Julie tight close-up</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr><tr class="yes">
+<td class="ln">05</td>
+<td class="tc">0:43.0<br>0:46.3</td>
+<td class="q">&ldquo;It became automatic, like brushing my teeth.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f5.jpg" alt="frame 5" loading="lazy"><span>Teeth-brushing macro b-roll</span></td>
+<td class="st"><span class="p yes">HAS FOOTAGE</span></td>
+<td class="ac"><a class="btn" href="https://github.com/gitteromri-ux/lla-s09-s10-downloads/releases/download/julie-v23-raw-sources/RAW_TEETH_BRUSH.mp4" download>&#8595;&nbsp;RAW_TEETH_BRUSH.mp4</a></td>
+</tr><tr class="no">
+<td class="ln">06</td>
+<td class="tc">0:46.3<br>0:48.4</td>
+<td class="q">&ldquo;That is what actually beats money.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f6.jpg" alt="frame 6" loading="lazy"><span>Julie tight close-up</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr><tr class="runon">
+<td class="ln">07</td>
+<td class="tc">0:48.4<br>0:54.8</td>
+<td class="q">&ldquo;Not intensity, but repetition that never quit.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f7.jpg" alt="frame 7" loading="lazy"><span>Julie wide, then the “Make longevity automatic” card cuts in at 0:51.4 mid-sentence</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span><span class="p run">RUN-ON &mdash; CARD CUTS THE LINE</span></td>
+<td class="ac"><span class="need">Needs b-roll + card retimed after the line ends</span></td>
+</tr><tr class="no">
+<td class="ln">08</td>
+<td class="tc">1:22.8<br>1:25.6</td>
+<td class="q">&ldquo;Most people go all in for a week and then they quit for the second.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f8.jpg" alt="frame 8" loading="lazy"><span>Julie tight close-up</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr><tr class="yes">
+<td class="ln">09</td>
+<td class="tc">1:25.6<br>1:28.8</td>
+<td class="q">&ldquo;They build for intensity instead of repetition.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f9.jpg" alt="frame 9" loading="lazy"><span>Rowing / training b-roll</span></td>
+<td class="st"><span class="p yes">HAS FOOTAGE</span></td>
+<td class="ac"><a class="btn" href="https://github.com/gitteromri-ux/lla-courtney-final/releases/download/editor-sources-v1/BROLL_MOVEMENT.mp4" download>&#8595;&nbsp;BROLL_MOVEMENT.mp4</a></td>
+</tr><tr class="runon">
+<td class="ln">10</td>
+<td class="tc">1:28.8<br>1:34.8</td>
+<td class="q">&ldquo;So nothing ever compounds, and every restart begins back from zero.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f10.jpg" alt="frame 10" loading="lazy"><span>Julie wide, then the “Willpower fails” card cuts in at 1:33.7 mid-sentence</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span><span class="p run">RUN-ON &mdash; CARD CUTS THE LINE</span></td>
+<td class="ac"><span class="need">Needs b-roll + card retimed after the line ends</span></td>
+</tr><tr class="no">
+<td class="ln">11</td>
+<td class="tc">1:38.6<br>1:41.7</td>
+<td class="q">&ldquo;The results never come from the dramatic version.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f11.jpg" alt="frame 11" loading="lazy"><span>Julie wide, talking head</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr><tr class="no">
+<td class="ln">12</td>
+<td class="tc">1:41.7<br>1:44.2</td>
+<td class="q">&ldquo;They come from the boring version.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f12.jpg" alt="frame 12" loading="lazy"><span>Julie tight close-up</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr><tr class="no">
+<td class="ln">13</td>
+<td class="tc">1:44.2<br>1:51.7</td>
+<td class="q">&ldquo;Habits kept small enough to survive a bad week, done quietly for years, until it&#x27;s simply who you are.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f13.jpg" alt="frame 13" loading="lazy"><span>Julie wide, talking head</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr><tr class="no">
+<td class="ln">14</td>
+<td class="tc">1:51.7<br>1:56.3</td>
+<td class="q">&ldquo;The biggest bang for your buck was never the expensive version.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f14.jpg" alt="frame 14" loading="lazy"><span>Julie tight close-up</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr><tr class="no">
+<td class="ln">15</td>
+<td class="tc">1:56.3<br>1:59.3</td>
+<td class="q">&ldquo;It was the one you could actually keep on repeat.&rdquo;</td>
+<td class="sc"><img src="https://gitteromri-ux.github.io/lla-s09-s10-downloads/julie-v23-sources/fr/f15.jpg" alt="frame 15" loading="lazy"><span>Julie wide, talking head</span></td>
+<td class="st"><span class="p no">NO FOOTAGE</span></td>
+<td class="ac"><span class="need">Needs b-roll</span></td>
+</tr></tbody>
+</table>
+<div class="box">
+<h2>The three real problems</h2>
+<p><b>1. Thirteen lines run on talking head.</b> Two long dead stretches: 0:29&ndash;0:51 and 1:38&ndash;1:59. That is what reads as inconsistent.</p>
+<p><b>2. Framing flips shot to shot.</b> Wide (door and globe behind her) and tight close-up alternate line by line &mdash; lines 2/3, 11/12 and 13/14 flip mid-thought. Same take, two crops, no pattern.</p>
+<p><b>3. Two run-on sentences get cut by cards.</b> Line 07 and line 10 are both interrupted mid-sentence by a brand card. The card lands before she finishes the sentence.</p>
+</div>
+<div class="box">
+<h2>Eleven b-rolls already in hand, not used in those stretches</h2>
+<p>Drop these into the 13 empty lines before shooting anything new. All download directly.</p>
+<a class="btn sm" href="https://github.com/gitteromri-ux/lla-s09-s10-downloads/releases/download/julie-v23-raw-sources/RAW_SPORT_BIKE.mp4" download>&#8595;&nbsp;Bike training</a><a class="btn sm" href="https://github.com/gitteromri-ux/lla-s09-s10-downloads/releases/download/julie-v23-raw-sources/RAW_CLINIC_DASHBOARD.mp4" download>&#8595;&nbsp;Clinic dashboard</a><a class="btn sm" href="https://github.com/gitteromri-ux/lla-s09-s10-downloads/releases/download/julie-v23-raw-sources/RAW_CGM_KITCHEN.mp4" download>&#8595;&nbsp;Kitchen CGM (15s)</a><a class="btn sm" href="https://github.com/gitteromri-ux/lla-s09-s10-downloads/releases/download/julie-v23-raw-sources/RAW_SLEEP.mp4" download>&#8595;&nbsp;Sleep</a><a class="btn sm" href="https://github.com/gitteromri-ux/lla-courtney-final/releases/download/editor-sources-v1/BROLL_FOOD1.mp4" download>&#8595;&nbsp;Food 4K</a><a class="btn sm" href="https://github.com/gitteromri-ux/lla-s09-s10-downloads/releases/download/julie-v23-raw-sources/RAW_LAPTOP_TABLET.mp4" download>&#8595;&nbsp;Laptop / tablet</a><a class="btn sm" href="https://github.com/gitteromri-ux/lla-courtney-final/releases/download/editor-sources-v1/BROLL_ADD_1.mp4" download>&#8595;&nbsp;Faculty page pan</a><a class="btn sm" href="https://github.com/gitteromri-ux/lla-s09-s10-downloads/releases/download/julie-v23-raw-sources/RAW_CLOCK_MACRO.mp4" download>&#8595;&nbsp;Macro clock</a><a class="btn sm" href="https://github.com/gitteromri-ux/lla-courtney-final/releases/download/editor-sources-v1/BROLL_EQUIPMENT_STRETCHING_TRAINING_4K.mp4" download>&#8595;&nbsp;Training / stretching 4K</a><a class="btn sm" href="https://github.com/gitteromri-ux/lla-courtney-final/releases/download/editor-sources-v1/BROLL_PROTOCOL_1.mp4" download>&#8595;&nbsp;Protocol wheel</a><a class="btn sm" href="https://github.com/gitteromri-ux/lla-courtney-final/releases/download/editor-sources-v1/BROLL_OUTRO_PLUS_OPEN_2.mp4" download>&#8595;&nbsp;CGM arm overlay</a>
+</div>
+</main>
+<footer>Julie Gibson Clark x Longevity Life Academy &middot; V23 line audit &middot; frames sampled from the delivered film &middot; Gita Agency</footer>
+</body></html>
