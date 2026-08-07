@@ -1,0 +1,138 @@
+JULIE x LLA V23 FULL FILM - STORYBOARD WITH SPOKEN LINES
+
+[01] 0:00.0-0:03.5  Open · LLA ident   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · LLA ident master
+
+[02] 0:02.9-0:07.9  Identity banner card   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · card animation (5s) | PNG · identity banner
+
+[03] 0:07.4-0:12.1  Hook · Julie on camera   [CUT FROM JULIE MASTER / HAVE IT]
+    “Willpower is not the reason some people age slower than others.”
+    FOOTAGE: MP4 · Julie main camera raw (full)
+
+[04] 0:12.0-0:20.1  Mechanism · willpower runs out   [CUT FROM JULIE MASTER / HAVE IT]
+    “Willpower runs out.”
+    “Every serious study on behavior change says the same thing.”
+    “It's a tank, and it empties by the end of a hard day.”
+    FOOTAGE: MP4 · Julie main camera raw (full)
+
+[05] 0:19.6-0:24.2  Card · Slow your pace of aging   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · card animation (4.6s) | PNG · card
+
+[06] 0:23.6-0:27.2  Chart · one calendar year   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · card animation (3.6s) | PNG · chart frame
+
+[07] 0:26.7-0:29.5  B-roll · macro clock   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · clock macro
+
+[08] 0:29.0-0:45.4  Mechanism · the million dollar myth   [CUT FROM JULIE MASTER / HAVE IT]
+    “I didn't out-age a man spending $2 million a year on a burst of motivation.”
+    “I did it on the opposite.”
+    “Habits made so small and repeated so often, they stopped asking anything of me at all.”
+    “It became automatic, like brushing my teeth.”
+    FOOTAGE: MP4 · Julie main camera raw (full) | MP4 · teeth brushing b-roll
+
+[09] 0:45.3-0:51.9  Repetition bridge · on camera   [CUT FROM JULIE MASTER / HAVE IT]
+    “That is what actually beats money.”
+    “Not intensity, but repetition that never quit.”
+    FOOTAGE: MP4 · Julie main camera raw (full)
+
+[10] 0:51.4-0:54.9  Card · Make longevity automatic   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · card animation (3.5s) | PNG · card
+
+[11] 0:54.3-1:17.0  Credibility · ranked #2 on Earth   [CUT FROM JULIE MASTER / HAVE IT]
+    “I'm Julie Gibson Clark.”
+    “For over a year I held the number two spot in the world for slowest aging.”
+    “As a working mother, on an ordinary budget, ahead of men with full-time medical teams.”
+    “I never once relied on a heroic morning.”
+    “I relied on routines that ran themselves, whether I felt like it or not.”
+    “That's the only reason they lasted.”
+    FOOTAGE: MP4 · Julie main camera raw (full) | MP4 · clinic dashboard b-roll | MP4 · training b-roll 4K
+
+[12] 1:16.9-1:34.2  Method · sleep, food, movement   [CUT FROM JULIE MASTER / HAVE IT]
+    “I focus on three simple things.”
+    “Sleep. Food. Movement.”
+    “Most people go all in for a week and then they quit for the second.”
+    “They build for intensity instead of repetition.”
+    “So nothing ever compounds, and every restart begins back from zero.”
+    FOOTAGE: MP4 · sleep b-roll | MP4 · food b-roll 4K | MP4 · movement b-roll
+
+[13] 1:33.7-1:38.3  Card · Willpower fails, habits don't   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · card animation (4.6s) | PNG · card
+
+[14] 1:37.7-1:58.7  Payoff · the version of you that you keep   [CUT FROM JULIE MASTER / HAVE IT]
+    “The results never come from the dramatic version.”
+    “They come from the boring version.”
+    “Habits kept small enough to survive a bad week, done quietly for years, until it's simply who you are.”
+    “The biggest bang for your buck was never the expensive version.”
+    “It was the one you could actually keep on repeat.”
+    FOOTAGE: MP4 · Julie main camera raw (full) | MP4 · bike training b-roll
+
+[15] 1:58.1-2:02.7  Card · Learn from the #2 slowest ager   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · card animation (4.6s) | PNG · card
+
+[16] 2:02.2-2:06.3  Offer · on camera   [CUT FROM JULIE MASTER / HAVE IT]
+    “Come learn with us at Longevity Life Academy,”
+    “across six pillars and 18 live sessions.”
+    FOOTAGE: MP4 · Julie main camera raw (full)
+
+[17] 2:06.3-2:08.2  Card · 18 Live Session Course   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · card animation (1.9s) | PNG · card
+
+[18] 2:08.2-2:13.2  As seen on · press wall   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · card animation (12s) | PNG · as seen on frame | PNG · press articles frame
+
+[19] 2:13.2-2:16.4  Real live session · Zoom room   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · Zoom live session
+
+[20] 2:16.4-2:20.0  Phones collage   [READY ASSET / HAVE IT]
+    “We'll build habits small enough to keep on your busiest week.”
+    FOOTAGE: MP4 · card animation (3.6s) | PNG · phones collage
+
+[21] 2:20.0-2:24.5  Kitchen CGM   [READY ASSET / HAVE IT]
+    “The ones that survive travel, stress, and a full calendar,”
+    FOOTAGE: MP4 · kitchen CGM (full 15s)
+
+[22] 2:24.5-2:28.4  Laptop protocol, slowed   [READY ASSET / HAVE IT]
+    “designed around your real life until they run on their own.”
+    FOOTAGE: MP4 · tablet scene
+
+[23] 2:28.4-2:32.3  Faculty website pan   [READY ASSET / HAVE IT]
+    “You don't need more willpower.”
+    FOOTAGE: MP4 · faculty page capture
+
+[24] 2:32.3-2:34.9  Protocol card   [READY ASSET / HAVE IT]
+    “You need a curriculum that makes longevity automatic.”
+    FOOTAGE: MP4 · card animation (2.6s) | PNG · card
+
+[25] 2:34.9-2:38.0  Biomarkers · CGM arm overlay   [READY ASSET / HAVE IT]
+    “It's your life.”
+    FOOTAGE: MP4 · CGM arm overlay
+
+[26] 2:37.9-2:41.7  Welcome to longevity · on camera   [CUT FROM JULIE MASTER / HAVE IT]
+    “Live it well.”
+    “I'm Julie, and welcome to Longevity Life Academy.”
+    FOOTAGE: MP4 · Julie main camera raw (full)
+
+[27] 2:41.2-2:44.7  Protocol wheel   [READY ASSET / HAVE IT]
+    “…welcome to Longevity Life Academy. (line tail, ends 2:42.5)”
+    FOOTAGE: MP4 · protocol wheel
+
+[28] 2:44.3-2:47.2  Black card · by eTeacher   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · card animation (2.9s) | PNG · eTeacher card
+
+[29] 2:46.8-2:50.3  Close · LLA outro   [READY ASSET / HAVE IT]
+    (no VO — music only)
+    FOOTAGE: MP4 · LLA outro card
